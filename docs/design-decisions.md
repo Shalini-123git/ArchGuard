@@ -1,21 +1,26 @@
-# Design decisions (Phase 1)
+# Design decisions
 
-## Two-pass graph
+Living notes. Each phase appends the choices that are hard to reverse.
 
-Pass 1 collects every package that a parsed file declares. Pass 2 keeps an import only when that package exists in the project. That is how third-party libraries disappear without a classpath.
+## Phase 0
 
-`java.*` and `javax.*` are also dropped explicitly so a coincidental project package name cannot pull JDK types into the graph.
+- Multi-module Maven so `core` stays free of Spring and is easy to unit-test.
+- Parent POM is `spring-boot-starter-parent` only for plugin and BOM versions. `core` does not depend on Spring.
+- CI is a single `mvn -B verify` job. No extra linters until they earn their keep.
 
-## Cycles via SCCs
+## Phase 1
 
-A cycle of three packages is one strongly connected component of size 3. Listing SCCs with size > 1 reports every circular group once, including nested knots that a simple DFS cycle walk might split awkwardly.
+- Two-pass graph: collect declared packages, then keep only imports that point at those packages. That drops third-party libraries without a compile classpath.
+- `java.*` and `javax.*` are also dropped explicitly.
+- Cycles are strongly connected components with size > 1, not a one-off DFS “find a loop”.
+- Same-package imports are ignored (no self-loops).
+- Parse failures are logged, counted, and skipped.
+- Default scans skip `src/test` so tests do not invent architecture edges.
 
-Self-loops are not reported: same-package imports are ignored when the graph is built.
+## Phase 2
 
-## Parse failures
-
-Broken files are expected in real trees. The scan continues, logs the path and parser message to stderr, and increments `parseFailureCount`. Those files do not contribute packages or edges.
-
-## Test sources
-
-Default scans skip any path with a `src/test` segment so unit tests do not invent architecture edges. `--include-tests` turns that back on.
+- YAML is loaded with Jackson; invalid files fail with a clear message rather than a partial rule set.
+- A package matches the **first** layer whose pattern equals the package or is a prefix (`com.example.web` matches `com.example.web.api`). Unmatched packages are `unknown` and do not trigger forbidden-layer rules.
+- Blast radius is reverse reachability: packages that can reach a violating package. The violating packages themselves are not counted.
+- For a cycle, the seeds are every package in the SCC; the blast radius is everyone outside the SCC who depends on it.
+- For a forbidden edge, the seed is the **from** package (the one that made the illegal import).

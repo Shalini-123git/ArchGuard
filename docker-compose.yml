@@ -1,0 +1,4 @@
+# Local stack is added in Phase 7 (API image + PostgreSQL).
+# This file exists so the repository layout matches the project plan.
+
+services: {}

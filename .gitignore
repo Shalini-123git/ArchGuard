@@ -1,4 +1,7 @@
 target/
+out/
+bin/
+*.class
 .idea/
 *.iml
 .classpath
