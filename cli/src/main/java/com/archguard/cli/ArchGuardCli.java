@@ -1,9 +1,12 @@
 package com.archguard.cli;
 
+import com.archguard.analysis.ArchitectureViolation;
 import com.archguard.analysis.ParseFailure;
 import com.archguard.analysis.ProjectAnalyzer;
 import com.archguard.analysis.ScanReport;
 import com.archguard.cycle.DependencyCycle;
+import com.archguard.rules.ArchitectureRules;
+import com.archguard.rules.ArchitectureRulesLoader;
 import com.archguard.scan.ScanOptions;
 
 import java.io.PrintStream;
@@ -15,18 +18,29 @@ import java.nio.file.Path;
  */
 public final class ArchGuardCli {
 
-    private static final String USAGE = "Usage: scan <path> [--include-tests]";
+    private static final String USAGE = "Usage: scan <path> [--rules <file>] [--include-tests]";
 
     private final ProjectAnalyzer projectAnalyzer;
+    private final ArchitectureRulesLoader rulesLoader;
     private final PrintStream out;
     private final PrintStream err;
 
     public ArchGuardCli() {
-        this(new ProjectAnalyzer(), System.out, System.err);
+        this(new ProjectAnalyzer(), new ArchitectureRulesLoader(), System.out, System.err);
     }
 
     ArchGuardCli(ProjectAnalyzer projectAnalyzer, PrintStream out, PrintStream err) {
+        this(projectAnalyzer, new ArchitectureRulesLoader(), out, err);
+    }
+
+    ArchGuardCli(
+            ProjectAnalyzer projectAnalyzer,
+            ArchitectureRulesLoader rulesLoader,
+            PrintStream out,
+            PrintStream err
+    ) {
         this.projectAnalyzer = projectAnalyzer;
+        this.rulesLoader = rulesLoader;
         this.out = out;
         this.err = err;
     }
@@ -42,11 +56,19 @@ public final class ArchGuardCli {
             return 1;
         }
         String pathArgument = null;
+        String rulesArgument = null;
         boolean includeTestSources = false;
         for (int index = 1; index < args.length; index++) {
             String argument = args[index];
             if ("--include-tests".equals(argument)) {
                 includeTestSources = true;
+            } else if ("--rules".equals(argument)) {
+                if (index + 1 >= args.length) {
+                    err.println(USAGE);
+                    return 1;
+                }
+                index++;
+                rulesArgument = args[index];
             } else if (pathArgument == null) {
                 pathArgument = argument;
             } else {
@@ -63,8 +85,22 @@ public final class ArchGuardCli {
             err.println("Scan path does not exist or is not a directory: " + pathArgument);
             return 1;
         }
+        ArchitectureRules rules = null;
+        if (rulesArgument != null) {
+            Path rulesPath = Path.of(rulesArgument);
+            if (!Files.isRegularFile(rulesPath)) {
+                err.println("Rules file does not exist: " + rulesArgument);
+                return 1;
+            }
+            try {
+                rules = rulesLoader.load(rulesPath);
+            } catch (IllegalArgumentException exception) {
+                err.println(exception.getMessage());
+                return 1;
+            }
+        }
         ScanOptions options = includeTestSources ? ScanOptions.includingTestSources() : ScanOptions.defaults();
-        ScanReport report = projectAnalyzer.analyze(root, options);
+        ScanReport report = projectAnalyzer.analyze(root, options, rules);
         printReport(report);
         return 0;
     }
@@ -79,6 +115,18 @@ public final class ArchGuardCli {
         out.println("Cycles: " + report.getCycles().size());
         for (DependencyCycle cycle : report.getCycles()) {
             out.println("  " + cycle);
+        }
+        if (!report.getViolations().isEmpty()) {
+            out.println("Violations: " + report.getViolations().size());
+            for (ArchitectureViolation violation : report.getViolations()) {
+                out.println(
+                        "  " + violation.getRuleId()
+                                + " " + violation.getFromPackage()
+                                + " -> " + violation.getToPackage()
+                                + " [" + violation.getSeverity() + "]"
+                                + " blastRadius=" + violation.getBlastRadiusCount()
+                );
+            }
         }
     }
 }

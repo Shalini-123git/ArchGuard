@@ -21,8 +21,8 @@ class SampleProjectAnalyzerTest {
         Path sampleProject = SampleProjectLocator.locate();
         ScanReport report = analyzer.analyze(sampleProject, ScanOptions.defaults());
 
-        assertEquals(6, report.packageCount());
-        assertEquals(5, report.edgeCount());
+        assertEquals(8, report.packageCount());
+        assertEquals(7, report.edgeCount());
         assertEquals(1, report.parseFailureCount());
         assertTrue(report.getParseFailures().get(0).getFile().toString().endsWith("Broken.java"));
 
