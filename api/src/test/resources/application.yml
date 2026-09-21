@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:archguard;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+archguard:
+  scan:
+    local-enabled: true
+    core-pool-size: 1
+    max-pool-size: 1
+    queue-capacity: 10
