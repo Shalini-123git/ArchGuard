@@ -41,7 +41,9 @@ class ScanControllerIntegrationTest {
                 .andExpect(jsonPath("$.modules.length()").value(org.hamcrest.Matchers.greaterThan(0)))
                 .andExpect(jsonPath("$.dependencies.length()").value(org.hamcrest.Matchers.greaterThan(0)));
         mockMvc.perform(get("/api/scans/{id}/violations", scanId)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(org.hamcrest.Matchers.greaterThan(0)));
+                .andExpect(jsonPath("$.length()").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$[0].explanation").isNotEmpty())
+                .andExpect(jsonPath("$[0].explanationFallback").value(true));
     }
 
     @Test

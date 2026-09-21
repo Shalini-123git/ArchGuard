@@ -16,3 +16,5 @@ archguard:
     core-pool-size: 1
     max-pool-size: 1
     queue-capacity: 10
+  llm:
+    violations-per-scan-limit: 20

@@ -5,6 +5,7 @@ import com.archguard.analysis.ScanReport;
 import com.archguard.api.persistence.ScanEntity;
 import com.archguard.api.persistence.ScanSourceType;
 import com.archguard.api.repository.ScanJpaRepository;
+import com.archguard.api.llm.ViolationExplanationService;
 import com.archguard.rules.ArchitectureRules;
 import com.archguard.rules.ArchitectureRulesLoader;
 import com.archguard.scan.ScanOptions;
@@ -18,11 +19,13 @@ public class ScanWorker {
     private final ScanJpaRepository scans;
     private final ScanPersistenceService persistence;
     private final IngestionService ingestion;
+    private final ViolationExplanationService explanations;
     private final ProjectAnalyzer analyzer = new ProjectAnalyzer();
     private final ArchitectureRulesLoader rulesLoader = new ArchitectureRulesLoader();
 
-    public ScanWorker(ScanJpaRepository scans, ScanPersistenceService persistence, IngestionService ingestion) {
-        this.scans = scans; this.persistence = persistence; this.ingestion = ingestion;
+    public ScanWorker(ScanJpaRepository scans, ScanPersistenceService persistence, IngestionService ingestion,
+                      ViolationExplanationService explanations) {
+        this.scans = scans; this.persistence = persistence; this.ingestion = ingestion; this.explanations = explanations;
     }
 
     public void execute(UUID scanId) {
@@ -50,6 +53,7 @@ public class ScanWorker {
     private void complete(UUID scanId, ProjectSource source, ArchitectureRules rules) {
         ScanReport report = analyzer.analyze(source.root(), ScanOptions.defaults(), rules);
         persistence.persistCompleted(scanId, source.commitSha(), report);
+        explanations.explainScan(scanId, source.root());
     }
 
     private ArchitectureRules rules(String rulesYaml) {

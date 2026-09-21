@@ -32,3 +32,10 @@ Living notes. Each phase appends the choices that are hard to reverse.
 - A scan row is committed as `QUEUED` before it is submitted after transaction commit to the bounded executor. This prevents workers from observing an uncommitted scan.
 - Remote ingestion accepts HTTPS URLs only, requests JGit depth-one clones, applies configured transport and size limits, and removes the temporary clone in `finally`.
 - Local scans are deliberately disabled outside the explicit configuration flag so filesystem paths cannot be submitted accidentally in production.
+
+## Phase 4
+
+- `LlmClient` keeps Groq-specific HTTP details outside scan orchestration. Groq's OpenAI-compatible Chat Completions endpoint is called through Spring `RestClient` with connect/read limits and one bounded retry.
+- The LLM sees a bounded `ViolationContext` only: rule facts, package names, a capped sorted blast radius, and a capped set of import lines. The prompt explicitly treats source text as data rather than instructions.
+- Explanation cache keys are SHA-256 hashes of the complete bounded context. Both provider output and deterministic fallbacks are cached to avoid repeated calls for identical facts.
+- An explanation failure never changes a completed deterministic scan into a failed one; each affected violation receives a marked fallback explanation.

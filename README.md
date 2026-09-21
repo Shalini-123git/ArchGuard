@@ -55,7 +55,7 @@ Optional: `scan sample-project --include-tests` also walks `src/test`.
 - [x] Phase 1 — parser, graph, cycles, CLI
 - [x] Phase 2 — YAML rules and blast radius
 - [x] Phase 3 — REST API, JGit, PostgreSQL
-- [ ] Phase 4 — LLM explanations
+- [x] Phase 4 — LLM explanations
 - [ ] Phase 5 — React dashboard
 - [ ] Phase 6 — health score and trend
 - [ ] Phase 7 — Docker and deployment
@@ -100,3 +100,19 @@ The response contains the scan ID. Poll `GET /api/scans/{id}`, then use `GET /ap
 Remote scans accept only HTTPS URLs, use a depth-one clone, apply configured clone size and JGit transport-time limits, record the commit SHA, and delete the temporary clone afterwards. Local folder scans are disabled unless `ARCHGUARD_LOCAL_SCAN_ENABLED=true`; they exist for controlled development and integration tests.
 
 Database settings come from `ARCHGUARD_DB_URL`, `ARCHGUARD_DB_USERNAME`, and `ARCHGUARD_DB_PASSWORD`. Flyway applies the schema migration at startup. Additional bounds are `ARCHGUARD_MAX_CLONE_BYTES`, `ARCHGUARD_CLONE_TIMEOUT`, and the `ARCHGUARD_SCAN_*` executor settings.
+
+## LLM explanations (Phase 4)
+
+ArchGuard uses Groq's OpenAI-compatible Chat Completions endpoint through a small provider interface. Deterministic facts always remain the source of truth; an LLM can only explain a stored violation.
+
+Set `LLM_API_KEY` and optionally select a Groq model before starting the API:
+
+```powershell
+$env:LLM_API_KEY = "your-groq-api-key"
+$env:ARCHGUARD_LLM_MODEL = "llama-3.3-70b-versatile"
+mvn -pl api -am spring-boot:run
+```
+
+Manual smoke test: start PostgreSQL and the API, submit a local sample scan with `ARCHGUARD_LOCAL_SCAN_ENABLED=true`, poll it to `COMPLETED`, then call `GET /api/scans/{id}/violations`. Each violation includes `explanation` and `explanationFallback`. With a valid key, `explanationFallback` should be `false`; without a key or if Groq times out, scans still complete with a deterministic fallback and `explanationFallback: true`.
+
+Explanations are cached by a SHA-256 hash of bounded violation facts. The defaults limit blast-radius packages to 10, import lines to 3, and explanations to 20 violations per scan. Configure them with `ARCHGUARD_LLM_BLAST_RADIUS_LIMIT`, `ARCHGUARD_LLM_SNIPPET_LINE_LIMIT`, and `ARCHGUARD_LLM_VIOLATIONS_PER_SCAN_LIMIT`.

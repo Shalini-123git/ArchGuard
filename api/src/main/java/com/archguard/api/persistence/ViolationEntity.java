@@ -1,6 +1,7 @@
 package com.archguard.api.persistence;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.Column;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -30,6 +31,9 @@ public class ViolationEntity {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "target_module_id")
     private ModuleEntity targetModule;
     private int blastRadiusCount;
+    @Column(columnDefinition = "TEXT")
+    private String explanation;
+    private boolean explanationFallback;
     @ManyToMany
     @JoinTable(name = "violation_affected_modules", joinColumns = @JoinColumn(name = "violation_id"), inverseJoinColumns = @JoinColumn(name = "module_id"))
     private Set<ModuleEntity> affectedModules = new LinkedHashSet<>();
@@ -46,4 +50,7 @@ public class ViolationEntity {
     public ModuleEntity getTargetModule() { return targetModule; }
     public int getBlastRadiusCount() { return blastRadiusCount; }
     public Set<ModuleEntity> getAffectedModules() { return Set.copyOf(affectedModules); }
+    public String getExplanation() { return explanation; }
+    public boolean isExplanationFallback() { return explanationFallback; }
+    public void setExplanation(String explanation, boolean fallback) { this.explanation = explanation; this.explanationFallback = fallback; }
 }

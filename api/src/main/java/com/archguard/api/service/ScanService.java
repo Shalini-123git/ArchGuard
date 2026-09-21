@@ -85,7 +85,8 @@ public class ScanService {
                 violation.getId(), violation.getRuleId(), violation.getSeverity(),
                 violation.getSourceModule() == null ? null : violation.getSourceModule().getName(),
                 violation.getTargetModule() == null ? null : violation.getTargetModule().getName(), violation.getBlastRadiusCount(),
-                violation.getAffectedModules().stream().map(module -> module.getName()).sorted().toList())).toList();
+                violation.getAffectedModules().stream().map(module -> module.getName()).sorted().toList(),
+                violation.getExplanation(), violation.isExplanationFallback())).toList();
     }
 
     @Transactional(readOnly = true)
