@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: archguard
+      POSTGRES_USER: archguard
+      POSTGRES_PASSWORD: ${ARCHGUARD_DB_PASSWORD:-archguard}
+    ports:
+      - "5432:5432"
+    volumes:
+      - archguard-postgres:/var/lib/postgresql/data
+
+volumes:
+  archguard-postgres:

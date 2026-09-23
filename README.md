@@ -54,8 +54,8 @@ Optional: `scan sample-project --include-tests` also walks `src/test`.
 - [x] Phase 0 — skeleton, README, CI
 - [x] Phase 1 — parser, graph, cycles, CLI
 - [x] Phase 2 — YAML rules and blast radius
-- [ ] Phase 3 — REST API, JGit, PostgreSQL
-- [ ] Phase 4 — LLM explanations
+- [x] Phase 3 — REST API, JGit, PostgreSQL
+- [x] Phase 4 — LLM explanations
 - [ ] Phase 5 — React dashboard
 - [ ] Phase 6 — health score and trend
 - [ ] Phase 7 — Docker and deployment
@@ -66,7 +66,7 @@ Optional: `scan sample-project --include-tests` also walks `src/test`.
 |---|---|
 | `core` | Plain Java: parse, graph, rules, cycles, blast radius. No Spring. |
 | `cli` | `scan <path> [--rules file] [--include-tests]` |
-| `api` | Minimal Spring Boot app (REST in Phase 3) |
+| `api` | Spring Boot REST API: scan queue, persistence, graph and violation endpoints |
 | `frontend` | Placeholder until Phase 5 |
 | `sample-project` | Fixture with a known cycle, a forbidden layer edge, wildcard/static imports, one bad file |
 | `sample-rules/archguard-rules.yml` | Layers and forbidden edges for the sample |
@@ -79,3 +79,40 @@ Optional: `scan sample-project --include-tests` also walks `src/test`.
 - Wildcard: `com.example.app.App` imports `com.example.tools.*`
 - Static: `com.example.app.Counter` imports `com.example.util.Numbers.ZERO`
 - Unparsable: `com.example.broken.Broken.java`
+
+## Run the API (Phase 3)
+
+Start PostgreSQL for local development:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+mvn -pl api -am spring-boot:run
+```
+
+The API listens on `http://localhost:8080`. Queue a remote scan with an HTTPS URL:
+
+```bash
+curl -X POST http://localhost:8080/api/scans -H "Content-Type: application/json" -d '{"repoUrl":"https://github.com/example/project.git"}'
+```
+
+The response contains the scan ID. Poll `GET /api/scans/{id}`, then use `GET /api/scans/{id}/graph` and `GET /api/scans/{id}/violations` after it is `COMPLETED`. `GET /api/repos/{repoId}/history` returns prior scans for a repository.
+
+Remote scans accept only HTTPS URLs, use a depth-one clone, apply configured clone size and JGit transport-time limits, record the commit SHA, and delete the temporary clone afterwards. Local folder scans are disabled unless `ARCHGUARD_LOCAL_SCAN_ENABLED=true`; they exist for controlled development and integration tests.
+
+Database settings come from `ARCHGUARD_DB_URL`, `ARCHGUARD_DB_USERNAME`, and `ARCHGUARD_DB_PASSWORD`. Flyway applies the schema migration at startup. Additional bounds are `ARCHGUARD_MAX_CLONE_BYTES`, `ARCHGUARD_CLONE_TIMEOUT`, and the `ARCHGUARD_SCAN_*` executor settings.
+
+## LLM explanations (Phase 4)
+
+ArchGuard uses Groq's OpenAI-compatible Chat Completions endpoint through a small provider interface. Deterministic facts always remain the source of truth; an LLM can only explain a stored violation.
+
+Set `LLM_API_KEY` and optionally select a Groq model before starting the API:
+
+```powershell
+$env:LLM_API_KEY = "your-groq-api-key"
+$env:ARCHGUARD_LLM_MODEL = "llama-3.3-70b-versatile"
+mvn -pl api -am spring-boot:run
+```
+
+Manual smoke test: start PostgreSQL and the API, submit a local sample scan with `ARCHGUARD_LOCAL_SCAN_ENABLED=true`, poll it to `COMPLETED`, then call `GET /api/scans/{id}/violations`. Each violation includes `explanation` and `explanationFallback`. With a valid key, `explanationFallback` should be `false`; without a key or if Groq times out, scans still complete with a deterministic fallback and `explanationFallback: true`.
+
+Explanations are cached by a SHA-256 hash of bounded violation facts. The defaults limit blast-radius packages to 10, import lines to 3, and explanations to 20 violations per scan. Configure them with `ARCHGUARD_LLM_BLAST_RADIUS_LIMIT`, `ARCHGUARD_LLM_SNIPPET_LINE_LIMIT`, and `ARCHGUARD_LLM_VIOLATIONS_PER_SCAN_LIMIT`.
