@@ -1,125 +1,99 @@
 # ArchGuard
 
-A static architecture checker for inherited Java codebases. Rotating teams often drift from the original package design. ArchGuard finds that drift, shows who is coupled to it, and (in later phases) explains it in plain English.
+ArchGuard is a static architecture and technical-debt analysis tool for inherited Java codebases. It finds package coupling that has drifted from the intended design, detects cycles, estimates the blast radius of each violation, and presents the results as a CLI report, REST API, and React dashboard.
 
-It **never compiles or runs** the code under scan. Every fact (edge, cycle, blast radius) comes from deterministic analysis. An LLM, when added, will only write explanations.
+ArchGuard never compiles or executes the code under analysis. Deterministic code produces every architecture fact; the optional LLM only explains persisted facts in plain English.
 
-## Planned features
+## Problem
 
-- Scan a GitHub URL (shallow clone) or a local folder, plus optional YAML rules
-- Package dependency graph from `package` and `import`
-- Layer rules and forbidden edges (e.g. controller must not depend on repository)
-- Cycle detection (strongly connected components)
-- Blast radius: packages that transitively depend on a violation
-- LLM explanations with a strict, facts-only prompt
-- PostgreSQL scan history and a health score
-- Dashboard: Cytoscape graph, violation list, health trend
-- CLI that runs the same core without the web server
+Legacy systems often have architecture rules that exist only in documents or in the memories of previous teams. Over time, controllers depend directly on repositories, packages become cyclic, and a small change can affect an unknown portion of the system. ArchGuard makes that drift measurable without requiring the target project to build.
 
-## Stack
+## Features
 
-Java 17, Spring Boot 3, Maven (`core`, `cli`, `api`), JavaParser, JGraphT, Jackson YAML, JGit, PostgreSQL + Spring Data JPA (H2 in tests), React + Vite + Cytoscape.js, JUnit 5, GitHub Actions, Docker.
+- Parse Java packages and regular, wildcard, and static imports.
+- Build a package dependency graph without executing analyzed code.
+- Check YAML layer and forbidden-edge rules.
+- Detect cycles using strongly connected components.
+- Calculate reverse-reachability blast radius.
+- Scan local folders or HTTPS Git repositories with bounded ingestion.
+- Persist scans, graph facts, violations, commit SHAs, and repository history.
+- Generate bounded LLM explanations with deterministic fallbacks and caching.
+- Calculate a deterministic health score and render a repository trend.
+- Explore the graph, layers, violations, explanations, and blast radius in React.
+- Run the same core analysis from the CLI and from GitHub Actions pull-request checks.
 
-Versions in the parent POM (Maven Central): JavaParser `3.28.2`, JGraphT `1.5.3`, Spring Boot `3.5.16`. Jackson YAML uses the version managed by Spring Boot’s BOM; `core` still has **no Spring dependency**.
+## Architecture
 
-## How to build
+```mermaid
+flowchart LR
+    U[User / CI] --> CLI[CLI]
+    U --> UI[React + Vite dashboard]
+    UI -->|/api proxy in dev| API[Spring Boot API]
+    CI[GitHub Actions PR check] --> CLI
+    CLI --> CORE[Core analyzer]
+    API --> CORE
+    API --> ING[Ingestion service]
+    ING --> SRC[Local folder or HTTPS shallow clone]
+    CORE --> PARSE[JavaParser]
+    CORE --> GRAPH[JGraphT package graph]
+    GRAPH --> RULES[YAML rules and cycle checks]
+    RULES --> FACTS[Deterministic scan report]
+    API --> DB[(PostgreSQL / H2 tests)]
+    FACTS --> DB
+    FACTS --> LLM[Optional LLM explanation boundary]
+    LLM --> DB
+    DB --> API
+    API --> UI
+```
 
-Requires Java 17+ and Maven 3.9+.
+## Stack and why
 
-```bash
+| Technology | Why it is used |
+|---|---|
+| Java 17 | Stable language/runtime baseline for the analyzer and API. |
+| Maven modules | Keeps the plain-Java core independent from Spring. |
+| JavaParser | Reads Java syntax without compiling or executing the target project. |
+| JGraphT | Provides graph structures and SCC algorithms instead of custom graph code. |
+| Jackson YAML | Loads human-readable architecture rules. |
+| Spring Boot | Provides REST, validation, persistence integration, and background orchestration. |
+| PostgreSQL | Durable scan history and graph/violation facts in deployments. |
+| H2 | Fast isolated database tests. |
+| JGit | Performs bounded shallow HTTPS repository ingestion. |
+| React + Vite | Small independently deployable dashboard with fast development feedback. |
+| Cytoscape.js | Renders unknown package graphs and supports selection/highlighting. |
+| Docker Compose | Runs PostgreSQL, API, and the production-like web container locally. |
+
+## Quickstart
+
+### Requirements
+
+- Java 17+
+- Maven 3.9+
+- Node.js 22+ and npm
+- PostgreSQL for API development, or Docker Desktop for the full stack
+
+### Build and test
+
+```powershell
 mvn verify
+cd frontend
+npm ci
+npm test
+npm run build
 ```
 
-CI (`.github/workflows/ci.yml`) runs the Maven suite and the frontend tests/build on push and pull request.
+### Run the CLI
 
-## How to run the CLI
-
-```bash
+```powershell
 mvn -pl cli -am install -DskipTests
-mvn -pl cli exec:java "-Dexec.args=scan sample-project"
-```
-
-With architecture rules:
-
-```bash
 mvn -pl cli exec:java "-Dexec.args=scan sample-project --rules sample-rules/archguard-rules.yml"
 ```
 
-Working directory is the repo root. Exit `0` means no violations, `1` means invalid input or an execution error, and `2` means the scan found violations.
+Exit codes are `0` for no violations, `1` for invalid input or execution errors, and `2` when violations are found.
 
-Optional: `scan sample-project --include-tests` also walks `src/test`.
+### Run the development dashboard
 
-## Roadmap
-
-- [x] Phase 0 — skeleton, README, CI
-- [x] Phase 1 — parser, graph, cycles, CLI
-- [x] Phase 2 — YAML rules and blast radius
-- [x] Phase 3 — REST API, JGit, PostgreSQL
-- [x] Phase 4 — LLM explanations
-- [x] Phase 5 — React dashboard
-- [x] Phase 6 — health score and trend
-- [ ] Phase 7 — Docker and deployment
-
-## Modules
-
-| Path | Role |
-|---|---|
-| `core` | Plain Java: parse, graph, rules, cycles, blast radius. No Spring. |
-| `cli` | `scan <path> [--rules file] [--include-tests]` |
-| `api` | Spring Boot REST API: scan queue, persistence, graph and violation endpoints |
-| `frontend` | Vite + React dashboard with Cytoscape dependency graph |
-| `sample-project` | Fixture with a known cycle, a forbidden layer edge, wildcard/static imports, one bad file |
-| `sample-rules/archguard-rules.yml` | Layers and forbidden edges for the sample |
-| `docker/` | Image layout in Phase 7 |
-
-## Sample project (fixture)
-
-- Cycle: `com.example.cycle.a` → `b` → `c` → `a`
-- Forbidden: `com.example.web` (controller) → `com.example.data` (repository); `com.example.app` depends on `web` so it appears in that blast radius
-- Wildcard: `com.example.app.App` imports `com.example.tools.*`
-- Static: `com.example.app.Counter` imports `com.example.util.Numbers.ZERO`
-- Unparsable: `com.example.broken.Broken.java`
-
-## Run the API (Phase 3)
-
-Start PostgreSQL for local development:
-
-```bash
-docker compose -f docker-compose.dev.yml up -d
-mvn -pl api -am spring-boot:run
-```
-
-The API listens on `http://localhost:8080`. Queue a remote scan with an HTTPS URL:
-
-```bash
-curl -X POST http://localhost:8080/api/scans -H "Content-Type: application/json" -d '{"repoUrl":"https://github.com/example/project.git"}'
-```
-
-The response contains the scan ID. Poll `GET /api/scans/{id}`, then use `GET /api/scans/{id}/graph` and `GET /api/scans/{id}/violations` after it is `COMPLETED`. `GET /api/repos/{repoId}/history` returns prior scans for a repository.
-
-Remote scans accept only HTTPS URLs, use a depth-one clone, apply configured clone size and JGit transport-time limits, record the commit SHA, and delete the temporary clone afterwards. Local folder scans are disabled unless `ARCHGUARD_LOCAL_SCAN_ENABLED=true`; they exist for controlled development and integration tests.
-
-Database settings come from `ARCHGUARD_DB_URL`, `ARCHGUARD_DB_USERNAME`, and `ARCHGUARD_DB_PASSWORD`. Flyway applies the schema migration at startup. Additional bounds are `ARCHGUARD_MAX_CLONE_BYTES`, `ARCHGUARD_CLONE_TIMEOUT`, and the `ARCHGUARD_SCAN_*` executor settings.
-
-## LLM explanations (Phase 4)
-
-ArchGuard uses Groq's OpenAI-compatible Chat Completions endpoint through a small provider interface. Deterministic facts always remain the source of truth; an LLM can only explain a stored violation.
-
-Set `LLM_API_KEY` and optionally select a Groq model before starting the API:
-
-```powershell
-$env:LLM_API_KEY = "your-groq-api-key"
-$env:ARCHGUARD_LLM_MODEL = "llama-3.3-70b-versatile"
-mvn -pl api -am spring-boot:run
-```
-
-Manual smoke test: start PostgreSQL and the API, submit a local sample scan with `ARCHGUARD_LOCAL_SCAN_ENABLED=true`, poll it to `COMPLETED`, then call `GET /api/scans/{id}/violations`. Each violation includes `explanation` and `explanationFallback`. With a valid key, `explanationFallback` should be `false`; without a key or if Groq times out, scans still complete with a deterministic fallback and `explanationFallback: true`.
-
-Explanations are cached by a SHA-256 hash of bounded violation facts. The defaults limit blast-radius packages to 10, import lines to 3, and explanations to 20 violations per scan. Configure them with `ARCHGUARD_LLM_BLAST_RADIUS_LIMIT`, `ARCHGUARD_LLM_SNIPPET_LINE_LIMIT`, and `ARCHGUARD_LLM_VIOLATIONS_PER_SCAN_LIMIT`.
-
-## Dashboard (Phase 5)
-
-Start PostgreSQL and the API in its explicit development profile, then start the frontend in another terminal:
+Start PostgreSQL and the API in one terminal:
 
 ```powershell
 docker compose -f docker-compose.dev.yml up -d
@@ -127,33 +101,121 @@ $env:SPRING_PROFILES_ACTIVE = "dev"
 mvn -pl api -am spring-boot:run
 ```
 
+Start Vite in another terminal:
+
 ```powershell
 cd frontend
 npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`, submit an HTTPS repository URL and optionally paste rules YAML. Vite proxies `/api` to port `8080`; the `dev` Spring profile also permits only the Vite origin with CORS. The app polls queued and running scans every second, then displays the graph, violations, and stored LLM explanation or deterministic fallback.
+Open `http://localhost:5173`. Vite proxies `/api` to the Spring API at `http://localhost:8080`.
 
-The graph uses Cytoscape's built-in **CoSE** layout. It is a good fit for an unknown package graph because it spaces related modules while still handling disconnected components, without requiring maintained coordinates. Nodes use a stable color for their rule layer, gold double borders mark cycle members, and red arrows are violating dependencies. Clicking a node marks its reverse-reachability blast radius; clicking a violation focuses its edge. Search and layer filters report the visible node count.
-
-Run the dashboard component tests with `cd frontend; npm test`. CI installs dependencies with `npm ci`, runs those tests, and produces a production build before accepting a change.
-
-`GET /api/scans/{id}/graph` now returns node objects (`id`, `layer`, `cycleMember`) and edge objects (`id`, `from`, `to`, `violationIds`) rather than bare module names and edges. This is a backward-incompatible read-model change made specifically to support graph rendering; the scan and violation endpoints are unchanged.
-
-## Health score and trend (Phase 6)
-
-Completed scan responses include `healthScore`. The score is deterministic: it starts at 100, deducts 10 points for each persisted violation, and never goes below 0. Queued, running, and failed scans return `healthScore: null`. The existing `GET /api/repos/{repositoryId}/history` endpoint includes the score for each completed scan; the dashboard uses that history to render the repository trend.
-
-## Local containers and PR checks (Phase 7)
-
-The local stack uses PostgreSQL, the Spring Boot API, and nginx serving the React build. The frontend image proxies `/api` to the API service; this is the simplest production-like arrangement because browsers make same-origin requests while nginx owns the static files and proxy.
+### Run the Docker stack
 
 ```powershell
 Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Open `http://localhost:8080`. The API has a dependency-free `GET /api/health` liveness endpoint used by Compose; Spring Actuator was deliberately not added. Set `ARCHGUARD_JAVA_TOOL_OPTIONS` in `.env` to tune the JVM, for example `-XX:MaxRAMPercentage=75.0`.
+Open `http://localhost:8080`. In this mode nginx serves the built dashboard and proxies `/api` to the API container.
 
-The `ArchGuard PR check` workflow scans every pull request with the root `archguard-rules.yml`, comments a summary on same-repository pull requests, and fails with exit code `2` for violations. See [docs/pr-check.md](docs/pr-check.md) for setup and testing instructions.
+## Configuration
+
+| Variable | Purpose |
+|---|---|
+| `ARCHGUARD_DB_URL` | JDBC database URL. |
+| `ARCHGUARD_DB_USERNAME` | Database username. |
+| `ARCHGUARD_DB_PASSWORD` | Database password. |
+| `ARCHGUARD_LOCAL_SCAN_ENABLED` | Explicitly enables local-folder API scans. |
+| `ARCHGUARD_MAX_CLONE_BYTES` | Maximum remote clone size. |
+| `ARCHGUARD_CLONE_TIMEOUT` | JGit transport timeout. |
+| `ARCHGUARD_SCAN_*` | Bounded scan executor settings. |
+| `LLM_API_KEY` | Optional Groq-compatible API key. |
+| `ARCHGUARD_LLM_MODEL` | Optional LLM model name. |
+| `ARCHGUARD_LLM_BLAST_RADIUS_LIMIT` | Maximum blast-radius packages in prompts. |
+| `ARCHGUARD_LLM_SNIPPET_LINE_LIMIT` | Maximum import lines in prompts. |
+| `ARCHGUARD_LLM_VIOLATIONS_PER_SCAN_LIMIT` | Maximum explanations per scan. |
+
+Copy [.env.example](./.env.example) for the Docker defaults. Secrets must come from environment variables and must not be committed.
+
+## Rules format
+
+```yaml
+layers:
+  - name: web
+    packagePatterns:
+      - com.example.web
+  - name: application
+    packagePatterns:
+      - com.example.app
+  - name: repository
+    packagePatterns:
+      - com.example.data
+forbidden:
+  - from: web
+    to: repository
+noCycles: true
+```
+
+The first matching layer wins. Unmatched packages are `unknown`. `noCycles: true` reports strongly connected components with more than one package.
+
+## API workflow
+
+```text
+POST /api/scans
+  -> QUEUED scan persisted
+  -> background worker validates/ingests source
+  -> core parses, graphs, checks rules, detects cycles, calculates blast radius
+  -> deterministic facts persisted
+  -> optional explanations cached or replaced with fallback text
+  -> scan becomes COMPLETED or FAILED
+
+GET /api/scans/{id}
+GET /api/scans/{id}/graph
+GET /api/scans/{id}/violations
+GET /api/repos/{repositoryId}/history
+```
+
+## Dashboard screenshots
+
+Add measured screenshots here after a browser smoke test:
+
+```text
+![Dashboard overview](docs/screenshots/dashboard-overview.png)
+![Violation and blast-radius view](docs/screenshots/violation-detail.png)
+![Health trend](docs/screenshots/health-trend.png)
+```
+
+The paths are placeholders and are intentionally not committed until real screenshots are captured.
+
+## Limitations
+
+- The analyzer is Java/package based; it does not model runtime calls, reflection, generated sources, or dependency-injection wiring.
+- Parse failures are reported and skipped rather than repaired.
+- The health score is intentionally simple: ten points per persisted violation, floored at zero.
+- The LLM is optional and can only explain bounded deterministic facts.
+- The dashboard currently requires the API to be available; it does not provide offline results.
+- Docker Compose is a local/production-like stack, not a complete production deployment with TLS, backups, monitoring, or secret management.
+- No performance benchmark numbers are claimed until real repositories are measured.
+
+## Roadmap
+
+- [x] Phase 0 — skeleton, README, and CI
+- [x] Phase 1 — parser, graph, cycles, and CLI
+- [x] Phase 2 — YAML rules and blast radius
+- [x] Phase 3 — REST API, JGit, and PostgreSQL
+- [x] Phase 4 — LLM explanations
+- [x] Phase 5 — React dashboard
+- [x] Phase 6 — health score and trend
+- [x] Phase 7 — Docker and pull-request checks
+- [ ] Production deployment, TLS, backups, monitoring, and measured performance study
+
+## Documentation
+
+- [docs/architecture.md](./docs/architecture.md) — current component architecture
+- [docs/design-decisions.md](./docs/design-decisions.md) — ADR-style design record
+- [docs/real-world-results.md](./docs/real-world-results.md) — reproducible repository study
+- [docs/resume.md](./docs/resume.md) — resume bullets and project pitch
+- [docs/interview-questions.md](./docs/interview-questions.md) — codebase-grounded interview preparation
+- [docs/demo-script.md](./docs/demo-script.md) — short demo walkthrough
