@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Extracts package and import information with JavaParser. Never compiles or runs the file.
@@ -26,6 +25,7 @@ public final class JavaSourceParser implements LanguageParser {
     public JavaSourceParser() {
         ParserConfiguration configuration = new ParserConfiguration();
         configuration.setCharacterEncoding(StandardCharsets.UTF_8);
+        configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
         this.javaParser = new JavaParser(configuration);
     }
 
