@@ -14,15 +14,26 @@ public final class ScanReport {
     private final PackageDependencyGraph graph;
     private final List<DependencyCycle> cycles;
     private final List<ParseFailure> parseFailures;
+    private final List<ArchitectureViolation> violations;
 
     public ScanReport(
             PackageDependencyGraph graph,
             List<DependencyCycle> cycles,
             List<ParseFailure> parseFailures
     ) {
+        this(graph, cycles, parseFailures, List.of());
+    }
+
+    public ScanReport(
+            PackageDependencyGraph graph,
+            List<DependencyCycle> cycles,
+            List<ParseFailure> parseFailures,
+            List<ArchitectureViolation> violations
+    ) {
         this.graph = Objects.requireNonNull(graph, "graph");
         this.cycles = List.copyOf(cycles);
         this.parseFailures = List.copyOf(parseFailures);
+        this.violations = List.copyOf(violations);
     }
 
     public PackageDependencyGraph getGraph() {
@@ -35,6 +46,10 @@ public final class ScanReport {
 
     public List<ParseFailure> getParseFailures() {
         return parseFailures;
+    }
+
+    public List<ArchitectureViolation> getViolations() {
+        return violations;
     }
 
     public int packageCount() {

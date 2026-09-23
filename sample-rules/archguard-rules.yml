@@ -1,4 +1,14 @@
-# layers and forbidden edges are added in Phase 2
-layers: []
-forbidden: []
+layers:
+  - name: controller
+    packagePatterns:
+      - com.example.web
+  - name: repository
+    packagePatterns:
+      - com.example.data
+
+forbidden:
+  - from: controller
+    to: repository
+    severity: HIGH
+
 noCycles: true

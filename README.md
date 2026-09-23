@@ -1,82 +1,81 @@
 # ArchGuard
 
-Static architecture checker for Java. It reads `.java` files (it never compiles or runs them), builds a **package → package** dependency graph, and reports circular dependencies.
+A static architecture checker for inherited Java codebases. Rotating teams often drift from the original package design. ArchGuard finds that drift, shows who is coupled to it, and (in later phases) explains it in plain English.
 
-This repository is built in phases. **Phase 1** is parser + graph + cycles + CLI.
+It **never compiles or runs** the code under scan. Every fact (edge, cycle, blast radius) comes from deterministic analysis. An LLM, when added, will only write explanations.
 
-## What works now
+## Planned features
 
-- Scan a local folder
-- Extract package names and imports (including wildcard and static imports)
-- Keep only **internal** dependencies (packages that exist in the scanned tree)
-- Ignore `java.*` / `javax.*` and third-party imports
-- Detect package cycles via strongly connected components
-- Print a summary from the CLI
-- Skip `.git`, `target`, `build`, `node_modules`
-- Skip `src/test` unless you pass `--include-tests`
-- Skip files that fail to parse (counted in the report)
+- Scan a GitHub URL (shallow clone) or a local folder, plus optional YAML rules
+- Package dependency graph from `package` and `import`
+- Layer rules and forbidden edges (e.g. controller must not depend on repository)
+- Cycle detection (strongly connected components)
+- Blast radius: packages that transitively depend on a violation
+- LLM explanations with a strict, facts-only prompt
+- PostgreSQL scan history and a health score
+- Dashboard: Cytoscape graph, violation list, health trend
+- CLI that runs the same core without the web server
 
-Not built yet: YAML layer rules, blast radius, REST API, JGit clone, LLM explanations, dashboard, health score, Docker.
+## Stack
 
-## Modules
+Java 17, Spring Boot 3, Maven (`core`, `cli`, `api`), JavaParser, JGraphT, Jackson YAML, JGit, PostgreSQL + Spring Data JPA (H2 in tests), React + Vite + Cytoscape.js, JUnit 5, GitHub Actions, Docker.
 
-| Module | Role |
-|---|---|
-| `core` | Plain Java. Parser, folder walk, graph, cycles. No Spring. |
-| `cli` | `scan <path>` around core |
-| `api` | Spring Boot placeholder for later phases |
-| `sample-project` | Tiny tree with a known cycle `a → b → c → a`, a wildcard import, a static import, and one unparsable file |
+Versions in the parent POM (Maven Central): JavaParser `3.28.2`, JGraphT `1.5.3`, Spring Boot `3.5.16`. Jackson YAML uses the version managed by Spring Boot’s BOM; `core` still has **no Spring dependency**.
 
-## Requirements
+## How to build
 
-- Java 17
-- Maven 3.9+
-
-Library versions in the parent POM (from Maven Central): JavaParser `3.28.2`, JGraphT `1.5.3`, Spring Boot `3.5.16`.
-
-## Build and test
+Requires Java 17+ and Maven 3.9+.
 
 ```bash
 mvn verify
 ```
 
-## Run the CLI
+CI (`.github/workflows/ci.yml`) runs the same command on push and pull request with Temurin JDK 17 and a Maven cache.
 
-From the repo root:
+## How to run the CLI
 
 ```bash
 mvn -pl cli -am install -DskipTests
 mvn -pl cli exec:java "-Dexec.args=scan sample-project"
 ```
 
-Working directory is the repo root, so the path is `sample-project`. From an IDE, run `com.archguard.cli.ArchGuardCli` with the same arguments.
+With architecture rules:
 
-Expected summary for `sample-project` (tests off):
-
-- Packages: 6
-- Edges: 5
-- Parse failures: 1 (`Broken.java`)
-- Cycles: 1 (`com.example.cycle.a`, `com.example.cycle.b`, `com.example.cycle.c`)
-
-Optional:
-
-```text
-scan sample-project --include-tests
+```bash
+mvn -pl cli exec:java "-Dexec.args=scan sample-project --rules sample-rules/archguard-rules.yml"
 ```
 
-That includes `src/test` and adds a second cycle (`app` ↔ `tools`).
+Working directory is the repo root. Exit `0` if the scan ran, `1` if arguments are invalid.
 
-Exit codes: `0` scan ran, `1` invalid arguments or missing folder.
+Optional: `scan sample-project --include-tests` also walks `src/test`.
 
-## Sample project layout (why it exists)
+## Roadmap
 
-Used as a fixture so tests fail if cycle detection silently breaks.
+- [x] Phase 0 — skeleton, README, CI
+- [x] Phase 1 — parser, graph, cycles, CLI
+- [x] Phase 2 — YAML rules and blast radius
+- [ ] Phase 3 — REST API, JGit, PostgreSQL
+- [ ] Phase 4 — LLM explanations
+- [ ] Phase 5 — React dashboard
+- [ ] Phase 6 — health score and trend
+- [ ] Phase 7 — Docker and deployment
+
+## Modules
+
+| Path | Role |
+|---|---|
+| `core` | Plain Java: parse, graph, rules, cycles, blast radius. No Spring. |
+| `cli` | `scan <path> [--rules file] [--include-tests]` |
+| `api` | Minimal Spring Boot app (REST in Phase 3) |
+| `frontend` | Placeholder until Phase 5 |
+| `sample-project` | Fixture with a known cycle, a forbidden layer edge, wildcard/static imports, one bad file |
+| `sample-rules/archguard-rules.yml` | Layers and forbidden edges for the sample |
+| `docker/` | Image layout in Phase 7 |
+
+## Sample project (fixture)
 
 - Cycle: `com.example.cycle.a` → `b` → `c` → `a`
+- Forbidden: `com.example.web` (controller) → `com.example.data` (repository); `com.example.app` depends on `web` so it appears in that blast radius
 - Wildcard: `com.example.app.App` imports `com.example.tools.*`
 - Static: `com.example.app.Counter` imports `com.example.util.Numbers.ZERO`
 - Unparsable: `com.example.broken.Broken.java`
-
-## CI
-
-`.github/workflows/ci.yml` runs `mvn -B verify` on push and pull request.

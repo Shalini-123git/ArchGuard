@@ -27,8 +27,8 @@ class ArchGuardCliTest {
         String text = output.toString(StandardCharsets.UTF_8);
 
         assertEquals(0, exitCode);
-        assertTrue(text.contains("Packages: 6"));
-        assertTrue(text.contains("Edges: 5"));
+        assertTrue(text.contains("Packages: 8"));
+        assertTrue(text.contains("Edges: 7"));
         assertTrue(text.contains("Parse failures: 1"));
         assertTrue(text.contains("Cycles: 1"));
         assertTrue(text.contains("com.example.cycle.a"));
@@ -48,7 +48,32 @@ class ArchGuardCliTest {
         assertEquals(1, cli.run(new String[] {}));
         assertEquals(1, cli.run(new String[] {"scan"}));
         assertEquals(1, cli.run(new String[] {"scan", "does-not-exist"}));
+        assertEquals(1, cli.run(new String[] {"scan", sampleRoot().toString(), "--rules"}));
         assertTrue(error.toString(StandardCharsets.UTF_8).contains("Usage:"));
+    }
+
+    @Test
+    void scanWithRulesPrintsForbiddenViolationAndBlastRadius() {
+        Path sampleProject = locateSampleProject();
+        Path rules = sampleProject.getParent().resolve("sample-rules").resolve("archguard-rules.yml");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ArchGuardCli cli = new ArchGuardCli(
+                new com.archguard.analysis.ProjectAnalyzer(),
+                new PrintStream(output, true, StandardCharsets.UTF_8),
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8)
+        );
+        int exitCode = cli.run(new String[] {"scan", sampleProject.toString(), "--rules", rules.toString()});
+        String text = output.toString(StandardCharsets.UTF_8);
+        assertEquals(0, exitCode);
+        assertTrue(text.contains("Cycles: 1"));
+        assertTrue(text.contains("Violations: 2"));
+        assertTrue(text.contains("forbidden:controller->repository"));
+        assertTrue(text.contains("blastRadius=1"));
+        assertTrue(text.contains("no-cycles"));
+    }
+
+    private static Path sampleRoot() {
+        return locateSampleProject();
     }
 
     private static Path locateSampleProject() {
