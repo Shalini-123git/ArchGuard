@@ -1,55 +1,69 @@
-# Design decisions
+# Architecture decision records
 
-Living notes. Each phase appends the choices that are hard to reverse.
+These records capture choices that are important to preserve while ArchGuard evolves.
 
-## Phase 0
+## ADR-001: Use import-level package dependencies
 
-- Multi-module Maven so `core` stays free of Spring and is easy to unit-test.
-- Parent POM is `spring-boot-starter-parent` only for plugin and BOM versions. `core` does not depend on Spring.
-- CI is a single `mvn -B verify` job. No extra linters until they earn their keep.
+**Status:** Accepted
 
-## Phase 1
+**Decision:** Build the graph from Java package declarations and imports rather than bytecode, runtime traces, or a full compiler model.
 
-- Two-pass graph: collect declared packages, then keep only imports that point at those packages. That drops third-party libraries without a compile classpath.
-- `java.*` and `javax.*` are also dropped explicitly.
-- Cycles are strongly connected components with size > 1, not a one-off DFS “find a loop”.
-- Same-package imports are ignored (no self-loops).
-- Parse failures are logged, counted, and skipped.
-- Default scans skip `src/test` so tests do not invent architecture edges.
+**Why:** ArchGuard is intended for inherited repositories that may not build in the current environment. Import-level analysis is deterministic, fast, understandable in a dashboard, and works without executing untrusted code. The two-pass graph keeps only imports that point to packages declared in the scanned source tree.
 
-## Phase 2
+**Trade-off:** Reflection, generated code, runtime calls, and dependency-injection wiring are not modeled.
 
-- YAML is loaded with Jackson; invalid files fail with a clear message rather than a partial rule set.
-- A package matches the **first** layer whose pattern equals the package or is a prefix (`com.example.web` matches `com.example.web.api`). Unmatched packages are `unknown` and do not trigger forbidden-layer rules.
-- Blast radius is reverse reachability: packages that can reach a violating package. The violating packages themselves are not counted.
-- For a cycle, the seeds are every package in the SCC; the blast radius is everyone outside the SCC who depends on it.
-- For a forbidden edge, the seed is the **from** package (the one that made the illegal import).
+## ADR-002: Detect cycles with strongly connected components
 
-## Phase 3
+**Status:** Accepted
 
-- Flyway owns the initial PostgreSQL/H2-compatible schema. Hibernate validates it but never creates or updates it.
-- `repositories`, `scans`, `modules`, `dependencies`, and `violations` preserve deterministic analysis facts; a join table retains every affected module in a violation's blast radius.
-- A scan row is committed as `QUEUED` before it is submitted after transaction commit to the bounded executor. This prevents workers from observing an uncommitted scan.
-- Remote ingestion accepts HTTPS URLs only, requests JGit depth-one clones, applies configured transport and size limits, and removes the temporary clone in `finally`.
-- Local scans are deliberately disabled outside the explicit configuration flag so filesystem paths cannot be submitted accidentally in production.
+**Decision:** Treat every strongly connected component with more than one package as a cycle.
 
-## Phase 4
+**Why:** SCC detection finds all mutually reachable packages in one graph pass and handles overlapping-looking loops more reliably than a collection of ad hoc DFS checks. JGraphT provides the implementation.
 
-- `LlmClient` keeps Groq-specific HTTP details outside scan orchestration. Groq's OpenAI-compatible Chat Completions endpoint is called through Spring `RestClient` with connect/read limits and one bounded retry.
-- The LLM sees a bounded `ViolationContext` only: rule facts, package names, a capped sorted blast radius, and a capped set of import lines. The prompt explicitly treats source text as data rather than instructions.
-- Explanation cache keys are SHA-256 hashes of the complete bounded context. Both provider output and deterministic fallbacks are cached to avoid repeated calls for identical facts.
-- An explanation failure never changes a completed deterministic scan into a failed one; each affected violation receives a marked fallback explanation.
+**Complexity:** Kosaraju-style SCC detection is `O(V + E)` for vertices and dependency edges.
 
-## Phase 5
+## ADR-003: Define blast radius as reverse reachability
 
-- The dashboard is a separate Vite application so the API remains deployable independently. During development, Vite proxies only `/api` to the Spring Boot server; production deployments must route that path to the API.
-- Cytoscape's built-in CoSE layout is used because package graphs have no maintained coordinates and can contain disconnected components.
-- The graph API returns deterministic node and edge metadata required for visualization. It does not obtain facts from the UI or from the LLM.
-- Vitest with jsdom and React Testing Library covers the scan lifecycle and key results interactions. The frontend has its own CI job because it is outside the Maven reactor.
+**Status:** Accepted
 
-## Phase 7
+**Decision:** The blast radius of a violation is the set of packages outside the violating seed that can reach that seed through reverse dependency traversal.
 
-- The local stack has three services: PostgreSQL, the API, and nginx serving the built frontend. nginx proxies `/api` internally so the browser uses one origin.
-- The API health check uses a small liveness endpoint rather than Spring Actuator. This keeps the dependency set unchanged while Compose can still wait for the API.
-- The PR workflow executes the built CLI directly so its exit code `2` remains distinguishable from invalid input or execution errors.
-- The workflow uses `pull_request`, never `pull_request_target`, because it checks out and scans untrusted pull-request code. Comments are skipped for forked pull requests because their token is read-only.
+**Why:** A package that depends transitively on a violating area is a plausible change-impact candidate. Excluding the seed itself makes the count represent downstream exposure rather than the violation location.
+
+**Trade-off:** This is structural coupling, not a prediction of runtime failure probability.
+
+## ADR-004: Keep the LLM behind a facts-only boundary
+
+**Status:** Accepted
+
+**Decision:** Deterministic analysis creates and persists violations; the LLM receives only bounded violation facts and writes explanations.
+
+**Why:** This prevents hallucinated packages, rules, cycles, or impact counts from becoming architecture facts. A missing key, timeout, or provider error produces a marked deterministic fallback rather than a failed scan.
+
+**Controls:** Context limits, SHA-256 cache keys, bounded retries/timeouts, and explicit `explanationFallback` metadata.
+
+## ADR-005: Use a simple health formula
+
+**Status:** Accepted
+
+**Decision:** `health = max(0, 100 - 10 * violationCount)`.
+
+**Why:** The formula is transparent, deterministic, easy to explain in a review, and stable across repositories. It is a directional signal, not a substitute for severity- or domain-specific risk assessment.
+
+## ADR-006: Treat analyzed repositories as untrusted input
+
+**Status:** Accepted
+
+**Decision:** Never compile or execute analyzed code; accept HTTPS remote URLs, use shallow bounded clones, enforce size/time limits, validate input, avoid logging secrets, and delete temporary clones in cleanup.
+
+**Why:** A repository scan is an input-processing boundary. These controls reduce command execution, resource exhaustion, SSRF-like URL misuse, credential leakage, and disk-retention risk.
+
+## ADR-007: Compare ArchGuard with ArchUnit, do not replace it
+
+**Status:** Accepted
+
+**Decision:** Position ArchGuard as a repository-level observability and technical-debt tool, while ArchUnit remains a build-time architecture-test library.
+
+**Why:** ArchUnit is excellent when a team owns the target build and wants executable Java tests close to production code. ArchGuard is useful before a build works, across inherited repositories, through a CLI/API/dashboard, with graph visualization, historical scans, blast radius, and optional explanations.
+
+**Trade-off:** ArchUnit has richer Java type semantics and integrates directly with a test suite; ArchGuard intentionally gives up some semantic depth for safe, standalone, repository-wide analysis.
