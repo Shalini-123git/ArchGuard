@@ -30,7 +30,7 @@ Requires Java 17+ and Maven 3.9+.
 mvn verify
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same command on push and pull request with Temurin JDK 17 and a Maven cache.
+CI (`.github/workflows/ci.yml`) runs the Maven suite and the frontend tests/build on push and pull request.
 
 ## How to run the CLI
 
@@ -45,7 +45,7 @@ With architecture rules:
 mvn -pl cli exec:java "-Dexec.args=scan sample-project --rules sample-rules/archguard-rules.yml"
 ```
 
-Working directory is the repo root. Exit `0` if the scan ran, `1` if arguments are invalid.
+Working directory is the repo root. Exit `0` means no violations, `1` means invalid input or an execution error, and `2` means the scan found violations.
 
 Optional: `scan sample-project --include-tests` also walks `src/test`.
 
@@ -56,8 +56,8 @@ Optional: `scan sample-project --include-tests` also walks `src/test`.
 - [x] Phase 2 — YAML rules and blast radius
 - [x] Phase 3 — REST API, JGit, PostgreSQL
 - [x] Phase 4 — LLM explanations
-- [ ] Phase 5 — React dashboard
-- [ ] Phase 6 — health score and trend
+- [x] Phase 5 — React dashboard
+- [x] Phase 6 — health score and trend
 - [ ] Phase 7 — Docker and deployment
 
 ## Modules
@@ -67,7 +67,7 @@ Optional: `scan sample-project --include-tests` also walks `src/test`.
 | `core` | Plain Java: parse, graph, rules, cycles, blast radius. No Spring. |
 | `cli` | `scan <path> [--rules file] [--include-tests]` |
 | `api` | Spring Boot REST API: scan queue, persistence, graph and violation endpoints |
-| `frontend` | Placeholder until Phase 5 |
+| `frontend` | Vite + React dashboard with Cytoscape dependency graph |
 | `sample-project` | Fixture with a known cycle, a forbidden layer edge, wildcard/static imports, one bad file |
 | `sample-rules/archguard-rules.yml` | Layers and forbidden edges for the sample |
 | `docker/` | Image layout in Phase 7 |
@@ -116,3 +116,44 @@ mvn -pl api -am spring-boot:run
 Manual smoke test: start PostgreSQL and the API, submit a local sample scan with `ARCHGUARD_LOCAL_SCAN_ENABLED=true`, poll it to `COMPLETED`, then call `GET /api/scans/{id}/violations`. Each violation includes `explanation` and `explanationFallback`. With a valid key, `explanationFallback` should be `false`; without a key or if Groq times out, scans still complete with a deterministic fallback and `explanationFallback: true`.
 
 Explanations are cached by a SHA-256 hash of bounded violation facts. The defaults limit blast-radius packages to 10, import lines to 3, and explanations to 20 violations per scan. Configure them with `ARCHGUARD_LLM_BLAST_RADIUS_LIMIT`, `ARCHGUARD_LLM_SNIPPET_LINE_LIMIT`, and `ARCHGUARD_LLM_VIOLATIONS_PER_SCAN_LIMIT`.
+
+## Dashboard (Phase 5)
+
+Start PostgreSQL and the API in its explicit development profile, then start the frontend in another terminal:
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d
+$env:SPRING_PROFILES_ACTIVE = "dev"
+mvn -pl api -am spring-boot:run
+```
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173`, submit an HTTPS repository URL and optionally paste rules YAML. Vite proxies `/api` to port `8080`; the `dev` Spring profile also permits only the Vite origin with CORS. The app polls queued and running scans every second, then displays the graph, violations, and stored LLM explanation or deterministic fallback.
+
+The graph uses Cytoscape's built-in **CoSE** layout. It is a good fit for an unknown package graph because it spaces related modules while still handling disconnected components, without requiring maintained coordinates. Nodes use a stable color for their rule layer, gold double borders mark cycle members, and red arrows are violating dependencies. Clicking a node marks its reverse-reachability blast radius; clicking a violation focuses its edge. Search and layer filters report the visible node count.
+
+Run the dashboard component tests with `cd frontend; npm test`. CI installs dependencies with `npm ci`, runs those tests, and produces a production build before accepting a change.
+
+`GET /api/scans/{id}/graph` now returns node objects (`id`, `layer`, `cycleMember`) and edge objects (`id`, `from`, `to`, `violationIds`) rather than bare module names and edges. This is a backward-incompatible read-model change made specifically to support graph rendering; the scan and violation endpoints are unchanged.
+
+## Health score and trend (Phase 6)
+
+Completed scan responses include `healthScore`. The score is deterministic: it starts at 100, deducts 10 points for each persisted violation, and never goes below 0. Queued, running, and failed scans return `healthScore: null`. The existing `GET /api/repos/{repositoryId}/history` endpoint includes the score for each completed scan; the dashboard uses that history to render the repository trend.
+
+## Local containers and PR checks (Phase 7)
+
+The local stack uses PostgreSQL, the Spring Boot API, and nginx serving the React build. The frontend image proxies `/api` to the API service; this is the simplest production-like arrangement because browsers make same-origin requests while nginx owns the static files and proxy.
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+Open `http://localhost:8080`. The API has a dependency-free `GET /api/health` liveness endpoint used by Compose; Spring Actuator was deliberately not added. Set `ARCHGUARD_JAVA_TOOL_OPTIONS` in `.env` to tune the JVM, for example `-XX:MaxRAMPercentage=75.0`.
+
+The `ArchGuard PR check` workflow scans every pull request with the root `archguard-rules.yml`, comments a summary on same-repository pull requests, and fails with exit code `2` for violations. See [docs/pr-check.md](docs/pr-check.md) for setup and testing instructions.

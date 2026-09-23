@@ -37,9 +37,12 @@ class ScanControllerIntegrationTest {
 
         JsonNode scan = waitForCompletion(scanId);
         assertTrue("COMPLETED".equals(scan.get("status").asText()), () -> scan.toString());
+        assertTrue(scan.get("healthScore").isInt(), () -> scan.toString());
         mockMvc.perform(get("/api/scans/{id}/graph", scanId)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.modules.length()").value(org.hamcrest.Matchers.greaterThan(0)))
-                .andExpect(jsonPath("$.dependencies.length()").value(org.hamcrest.Matchers.greaterThan(0)));
+                .andExpect(jsonPath("$.modules[0].layer").exists())
+                .andExpect(jsonPath("$.dependencies.length()").value(org.hamcrest.Matchers.greaterThan(0)))
+                .andExpect(jsonPath("$.dependencies[0].violationIds").exists());
         mockMvc.perform(get("/api/scans/{id}/violations", scanId)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(org.hamcrest.Matchers.greaterThan(0)))
                 .andExpect(jsonPath("$[0].explanation").isNotEmpty())

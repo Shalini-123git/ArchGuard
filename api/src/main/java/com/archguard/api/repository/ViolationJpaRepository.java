@@ -11,4 +11,6 @@ import java.util.UUID;
 public interface ViolationJpaRepository extends JpaRepository<ViolationEntity, UUID> {
     @Query("select distinct v from ViolationEntity v left join fetch v.affectedModules where v.scan.id = :scanId")
     List<ViolationEntity> findWithAffectedModulesByScanId(UUID scanId);
+
+    long countByScanId(UUID scanId);
 }
