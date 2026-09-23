@@ -17,6 +17,12 @@ import com.archguard.api.repository.ModuleJpaRepository;
 import com.archguard.api.repository.RepositoryJpaRepository;
 import com.archguard.api.repository.ScanJpaRepository;
 import com.archguard.api.repository.ViolationJpaRepository;
+import com.archguard.rules.ArchitectureRules;
+import com.archguard.rules.ArchitectureRulesLoader;
+import com.archguard.rules.LayerMatcher;
+import org.jgrapht.alg.connectivity.KosarajuStrongConnectivityInspector;
+import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.graph.DefaultDirectedGraph;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
@@ -26,6 +32,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 
 /** Orchestrates validation, durable queueing, background execution, and API read models. */
@@ -64,18 +73,26 @@ public class ScanService {
                 catch (RuntimeException ignored) { worker.reject(scanId); }
             }
         });
-        return ScanResponse.from(scan);
+        return response(scan);
     }
 
     @Transactional(readOnly = true)
-    public ScanResponse get(UUID scanId) { return ScanResponse.from(findScan(scanId)); }
+    public ScanResponse get(UUID scanId) { return response(findScan(scanId)); }
 
     @Transactional(readOnly = true)
     public GraphResponse graph(UUID scanId) {
-        requireCompleted(scanId);
+        ScanEntity scan = requireCompleted(scanId);
         var nodes = modules.findByScanIdOrderByName(scanId);
-        return new GraphResponse(nodes.stream().map(module -> module.getName()).toList(), dependencies.findByScanId(scanId).stream()
-                .map(edge -> new GraphResponse.GraphEdgeResponse(edge.getFromModule().getName(), edge.getToModule().getName())).toList());
+        var edges = dependencies.findByScanId(scanId);
+        var scanViolations = violations.findWithAffectedModulesByScanId(scanId);
+        List<Set<String>> cycles = cycles(nodes.stream().map(module -> module.getName()).toList(), edges);
+        Set<String> cycleMembers = cycles.stream().flatMap(Set::stream).collect(java.util.stream.Collectors.toSet());
+        Map<String, List<String>> edgeViolations = edgeViolations(scanViolations, edges, cycles);
+        LayerMatcher layerMatcher = new LayerMatcher(rules(scan.getRulesYaml()));
+        return new GraphResponse(nodes.stream().map(module -> new GraphResponse.GraphNodeResponse(module.getName(),
+                layerMatcher.layerOf(module.getName()), cycleMembers.contains(module.getName()))).toList(), edges.stream()
+                .map(edge -> new GraphResponse.GraphEdgeResponse(edge.getId().toString(), edge.getFromModule().getName(), edge.getToModule().getName(),
+                        edgeViolations.getOrDefault(edgeKey(edge.getFromModule().getName(), edge.getToModule().getName()), List.of()))).toList());
     }
 
     @Transactional(readOnly = true)
@@ -92,11 +109,52 @@ public class ScanService {
     @Transactional(readOnly = true)
     public List<ScanResponse> history(UUID repositoryId) {
         if (!repositories.existsById(repositoryId)) throw new NotFoundException("Repository not found: " + repositoryId);
-        return scans.findByRepositoryIdOrderByCreatedAtDesc(repositoryId).stream().map(ScanResponse::from).toList();
+        return scans.findByRepositoryIdOrderByCreatedAtDesc(repositoryId).stream().map(this::response).toList();
+    }
+
+    private ScanResponse response(ScanEntity scan) {
+        Integer score = scan.getStatus() == ScanStatus.COMPLETED
+                ? HealthScoreCalculator.calculate(violations.countByScanId(scan.getId()))
+                : null;
+        return ScanResponse.from(scan, score);
     }
 
     private ScanEntity findScan(UUID scanId) { return scans.findById(scanId).orElseThrow(() -> new NotFoundException("Scan not found: " + scanId)); }
-    private void requireCompleted(UUID scanId) {
-        if (findScan(scanId).getStatus() != ScanStatus.COMPLETED) throw new ConflictException("Scan is not completed");
+    private ScanEntity requireCompleted(UUID scanId) {
+        ScanEntity scan = findScan(scanId);
+        if (scan.getStatus() != ScanStatus.COMPLETED) throw new ConflictException("Scan is not completed");
+        return scan;
     }
+
+    private ArchitectureRules rules(String yaml) {
+        return yaml == null || yaml.isBlank() ? new ArchitectureRules() : new ArchitectureRulesLoader().load(yaml);
+    }
+
+    private List<Set<String>> cycles(List<String> nodeNames, List<com.archguard.api.persistence.DependencyEntity> edges) {
+        var graph = new DefaultDirectedGraph<String, DefaultEdge>(DefaultEdge.class);
+        nodeNames.forEach(graph::addVertex);
+        edges.forEach(edge -> graph.addEdge(edge.getFromModule().getName(), edge.getToModule().getName()));
+        return new KosarajuStrongConnectivityInspector<>(graph).stronglyConnectedSets().stream()
+                .filter(component -> component.size() > 1).toList();
+    }
+
+    private Map<String, List<String>> edgeViolations(List<com.archguard.api.persistence.ViolationEntity> scanViolations,
+                                                       List<com.archguard.api.persistence.DependencyEntity> edges, List<Set<String>> cycles) {
+        Map<String, List<String>> result = new LinkedHashMap<>();
+        for (var violation : scanViolations) {
+            if ("no-cycles".equals(violation.getRuleId())) {
+                Set<String> cycle = cycles.stream().filter(component ->
+                        component.contains(violation.getSourceModule().getName()) && component.contains(violation.getTargetModule().getName()))
+                        .findFirst().orElse(Set.of());
+                for (var edge : edges) if (cycle.contains(edge.getFromModule().getName()) && cycle.contains(edge.getToModule().getName())) {
+                    result.computeIfAbsent(edgeKey(edge.getFromModule().getName(), edge.getToModule().getName()), ignored -> new java.util.ArrayList<>()).add(violation.getId().toString());
+                }
+            } else if (violation.getSourceModule() != null && violation.getTargetModule() != null) {
+                result.computeIfAbsent(edgeKey(violation.getSourceModule().getName(), violation.getTargetModule().getName()), ignored -> new java.util.ArrayList<>()).add(violation.getId().toString());
+            }
+        }
+        return result;
+    }
+
+    private String edgeKey(String from, String to) { return from + "\u0000" + to; }
 }

@@ -1,5 +1,26 @@
 {
   "name": "archguard-frontend",
   "private": true,
-  "description": "Placeholder. React + Vite + Cytoscape dashboard is added in Phase 5."
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ArchGuard architecture scan dashboard.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "cytoscape": "^3.34.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^29.1.1",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
 }

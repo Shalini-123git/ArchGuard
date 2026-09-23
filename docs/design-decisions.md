@@ -39,3 +39,17 @@ Living notes. Each phase appends the choices that are hard to reverse.
 - The LLM sees a bounded `ViolationContext` only: rule facts, package names, a capped sorted blast radius, and a capped set of import lines. The prompt explicitly treats source text as data rather than instructions.
 - Explanation cache keys are SHA-256 hashes of the complete bounded context. Both provider output and deterministic fallbacks are cached to avoid repeated calls for identical facts.
 - An explanation failure never changes a completed deterministic scan into a failed one; each affected violation receives a marked fallback explanation.
+
+## Phase 5
+
+- The dashboard is a separate Vite application so the API remains deployable independently. During development, Vite proxies only `/api` to the Spring Boot server; production deployments must route that path to the API.
+- Cytoscape's built-in CoSE layout is used because package graphs have no maintained coordinates and can contain disconnected components.
+- The graph API returns deterministic node and edge metadata required for visualization. It does not obtain facts from the UI or from the LLM.
+- Vitest with jsdom and React Testing Library covers the scan lifecycle and key results interactions. The frontend has its own CI job because it is outside the Maven reactor.
+
+## Phase 7
+
+- The local stack has three services: PostgreSQL, the API, and nginx serving the built frontend. nginx proxies `/api` internally so the browser uses one origin.
+- The API health check uses a small liveness endpoint rather than Spring Actuator. This keeps the dependency set unchanged while Compose can still wait for the API.
+- The PR workflow executes the built CLI directly so its exit code `2` remains distinguishable from invalid input or execution errors.
+- The workflow uses `pull_request`, never `pull_request_target`, because it checks out and scans untrusted pull-request code. Comments are skipped for forked pull requests because their token is read-only.

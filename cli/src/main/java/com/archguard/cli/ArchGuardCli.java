@@ -102,7 +102,7 @@ public final class ArchGuardCli {
         ScanOptions options = includeTestSources ? ScanOptions.includingTestSources() : ScanOptions.defaults();
         ScanReport report = projectAnalyzer.analyze(root, options, rules);
         printReport(report);
-        return 0;
+        return report.getViolations().isEmpty() ? 0 : 2;
     }
 
     private void printReport(ScanReport report) {
@@ -116,17 +116,15 @@ public final class ArchGuardCli {
         for (DependencyCycle cycle : report.getCycles()) {
             out.println("  " + cycle);
         }
-        if (!report.getViolations().isEmpty()) {
-            out.println("Violations: " + report.getViolations().size());
-            for (ArchitectureViolation violation : report.getViolations()) {
-                out.println(
-                        "  " + violation.getRuleId()
-                                + " " + violation.getFromPackage()
-                                + " -> " + violation.getToPackage()
-                                + " [" + violation.getSeverity() + "]"
-                                + " blastRadius=" + violation.getBlastRadiusCount()
-                );
-            }
+        out.println("Violations: " + report.getViolations().size());
+        for (ArchitectureViolation violation : report.getViolations()) {
+            out.println(
+                    "  " + violation.getRuleId()
+                            + " " + violation.getFromPackage()
+                            + " -> " + violation.getToPackage()
+                            + " [" + violation.getSeverity() + "]"
+                            + " blastRadius=" + violation.getBlastRadiusCount()
+            );
         }
     }
 }

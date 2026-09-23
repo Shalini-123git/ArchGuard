@@ -64,7 +64,7 @@ class ArchGuardCliTest {
         );
         int exitCode = cli.run(new String[] {"scan", sampleProject.toString(), "--rules", rules.toString()});
         String text = output.toString(StandardCharsets.UTF_8);
-        assertEquals(0, exitCode);
+        assertEquals(2, exitCode);
         assertTrue(text.contains("Cycles: 1"));
         assertTrue(text.contains("Violations: 2"));
         assertTrue(text.contains("forbidden:controller->repository"));
