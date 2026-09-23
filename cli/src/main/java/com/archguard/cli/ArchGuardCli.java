@@ -12,13 +12,15 @@ import com.archguard.scan.ScanOptions;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Thin command line around {@link ProjectAnalyzer}. Argument parsing is manual on purpose (no Picocli).
  */
 public final class ArchGuardCli {
 
-    private static final String USAGE = "Usage: scan <path> [--rules <file>] [--include-tests]";
+    private static final String USAGE = "Usage: scan <path> [--rules <file>] [--include-tests] [--exclude <directory>]";
 
     private final ProjectAnalyzer projectAnalyzer;
     private final ArchitectureRulesLoader rulesLoader;
@@ -58,6 +60,7 @@ public final class ArchGuardCli {
         String pathArgument = null;
         String rulesArgument = null;
         boolean includeTestSources = false;
+        List<String> excludeArguments = new ArrayList<>();
         for (int index = 1; index < args.length; index++) {
             String argument = args[index];
             if ("--include-tests".equals(argument)) {
@@ -69,6 +72,13 @@ public final class ArchGuardCli {
                 }
                 index++;
                 rulesArgument = args[index];
+            } else if ("--exclude".equals(argument)) {
+                if (index + 1 >= args.length) {
+                    err.println(USAGE);
+                    return 1;
+                }
+                index++;
+                excludeArguments.add(args[index]);
             } else if (pathArgument == null) {
                 pathArgument = argument;
             } else {
@@ -100,6 +110,17 @@ public final class ArchGuardCli {
             }
         }
         ScanOptions options = includeTestSources ? ScanOptions.includingTestSources() : ScanOptions.defaults();
+        for (String excludeArgument : excludeArguments) {
+            Path excludedPath = Path.of(excludeArgument);
+            if (!excludedPath.isAbsolute()) {
+                excludedPath = root.resolve(excludedPath);
+            }
+            if (!Files.isDirectory(excludedPath)) {
+                err.println("Excluded path does not exist or is not a directory: " + excludeArgument);
+                return 1;
+            }
+            options = options.excluding(excludedPath);
+        }
         ScanReport report = projectAnalyzer.analyze(root, options, rules);
         printReport(report);
         return report.getViolations().isEmpty() ? 0 : 2;

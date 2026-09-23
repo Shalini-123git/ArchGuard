@@ -35,6 +35,18 @@ class JavaSourceParserTest {
     }
 
     @Test
+    void parsesJava17Syntax(@TempDir Path tempDir) throws Exception {
+        Path file = write(
+                tempDir,
+                "Modern.java",
+                "record Modern(String value) {}\n"
+                        + "class Usage { boolean matches(Object value) { return value instanceof Modern modern; } }"
+        );
+        ParseResult result = parser.parse(file);
+        assertTrue(result.isSuccessful());
+    }
+
+    @Test
     void mapsWildcardImportToPackage(@TempDir Path tempDir) throws Exception {
         Path file = write(
                 tempDir,

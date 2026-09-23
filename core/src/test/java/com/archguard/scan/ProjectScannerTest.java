@@ -43,4 +43,18 @@ class ProjectScannerTest {
         List<Path> files = scanner.findJavaFiles(root, ScanOptions.includingTestSources());
         assertEquals(1, files.size());
     }
+
+    @Test
+    void excludesConfiguredDirectory(@TempDir Path root) throws Exception {
+        Path included = root.resolve("src/main/java/Main.java");
+        Path excludedDirectory = root.resolve("sample-project/src/main/java");
+        Path excluded = excludedDirectory.resolve("Broken.java");
+        Files.createDirectories(included.getParent());
+        Files.createDirectories(excludedDirectory);
+        Files.writeString(included, "class Main {}");
+        Files.writeString(excluded, "this is not valid Java");
+
+        List<Path> files = scanner.findJavaFiles(root, ScanOptions.defaults().excluding(root.resolve("sample-project")));
+        assertEquals(List.of(included), files);
+    }
 }
