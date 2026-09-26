@@ -39,4 +39,12 @@ flowchart TD
 4. The report is persisted atomically as modules, dependencies, violations, and affected modules.
 5. Explanations are generated or loaded from cache without changing the deterministic result.
 6. The scan becomes `COMPLETED`; failed work becomes `FAILED` with a bounded message.
-7. The dashboard polls status, then loads graph, violations, and repository history.
+7. The dashboard polls the scan list and executor queue metrics, then loads graph, violations, and repository history for a completed scan.
+8. On process startup, scans still marked `QUEUED` or `RUNNING` are marked `FAILED` as interrupted. They are not retried because graph and violation persistence is not yet restart-idempotent.
+
+## Scan observability
+
+- `GET /api/scans` provides newest-first `ScanResponse` items with optional status filtering and zero-based pagination.
+- `GET /api/scans/queue-status` combines live `ThreadPoolTaskExecutor` measurements with database counts of queued and running scans.
+- Scan-worker logs include the scan ID, lifecycle events, elapsed duration, and analysis-stage markers. `ProjectAnalyzer` reads the scan ID from MDC so an execution can be followed across API and core logs.
+- `VITE_SCAN_QUEUE_POLL_INTERVAL_MS` controls queue refresh cadence; `VITE_SCAN_STUCK_THRESHOLD_MS` controls the age at which an active row is highlighted.

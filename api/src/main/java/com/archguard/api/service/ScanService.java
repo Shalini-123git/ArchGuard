@@ -3,6 +3,7 @@ package com.archguard.api.service;
 import com.archguard.api.config.ArchGuardProperties;
 import com.archguard.api.dto.CreateScanRequest;
 import com.archguard.api.dto.GraphResponse;
+import com.archguard.api.dto.QueueStatusResponse;
 import com.archguard.api.dto.ScanResponse;
 import com.archguard.api.dto.ViolationResponse;
 import com.archguard.api.exception.BadRequestException;
@@ -24,7 +25,9 @@ import org.jgrapht.alg.connectivity.KosarajuStrongConnectivityInspector;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.task.TaskExecutor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -36,10 +39,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Orchestrates validation, durable queueing, background execution, and API read models. */
 @Service
 public class ScanService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ScanService.class);
+    private static final int MAX_PAGE_SIZE = 100;
     private final RepositoryJpaRepository repositories;
     private final ScanJpaRepository scans;
     private final ModuleJpaRepository modules;
@@ -47,12 +54,12 @@ public class ScanService {
     private final ViolationJpaRepository violations;
     private final ScanWorker worker;
     private final IngestionService ingestion;
-    private final TaskExecutor scanExecutor;
+    private final ThreadPoolTaskExecutor scanExecutor;
     private final ArchGuardProperties properties;
 
     public ScanService(RepositoryJpaRepository repositories, ScanJpaRepository scans, ModuleJpaRepository modules,
                        DependencyJpaRepository dependencies, ViolationJpaRepository violations, ScanWorker worker, IngestionService ingestion,
-                       @Qualifier("scanExecutor") TaskExecutor scanExecutor, ArchGuardProperties properties) {
+                       @Qualifier("scanExecutor") ThreadPoolTaskExecutor scanExecutor, ArchGuardProperties properties) {
         this.repositories = repositories; this.scans = scans; this.modules = modules; this.dependencies = dependencies;
         this.violations = violations; this.worker = worker; this.ingestion = ingestion; this.scanExecutor = scanExecutor; this.properties = properties;
     }
@@ -69,6 +76,7 @@ public class ScanService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                LOGGER.info("scanId={} event=queued", scanId);
                 try { scanExecutor.execute(() -> worker.execute(scanId)); }
                 catch (RuntimeException ignored) { worker.reject(scanId); }
             }
@@ -78,6 +86,25 @@ public class ScanService {
 
     @Transactional(readOnly = true)
     public ScanResponse get(UUID scanId) { return response(findScan(scanId)); }
+
+    @Transactional(readOnly = true)
+    public List<ScanResponse> list(ScanStatus status, int page, int size) {
+        if (page < 0) throw new BadRequestException("page must be zero or greater");
+        if (size < 1 || size > MAX_PAGE_SIZE) throw new BadRequestException("size must be between 1 and " + MAX_PAGE_SIZE);
+        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        var pageScans = status == null ? scans.findAllByOrderByCreatedAtDesc(pageable)
+                : scans.findByStatusOrderByCreatedAtDesc(status, pageable);
+        return pageScans.stream().map(this::response).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public QueueStatusResponse queueStatus() {
+        var executor = scanExecutor.getThreadPoolExecutor();
+        var queue = executor.getQueue();
+        return new QueueStatusResponse(scanExecutor.getActiveCount(), scanExecutor.getPoolSize(), queue.size(),
+                queue.size() + queue.remainingCapacity(), scans.countByStatus(ScanStatus.QUEUED),
+                scans.countByStatus(ScanStatus.RUNNING), scanExecutor.getMaxPoolSize());
+    }
 
     @Transactional(readOnly = true)
     public GraphResponse graph(UUID scanId) {

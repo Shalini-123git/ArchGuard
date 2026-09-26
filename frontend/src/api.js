@@ -16,6 +16,12 @@ export function createScan({ repoUrl, rulesYaml }) {
 }
 
 export function getScan(scanId) { return request(`/scans/${scanId}`); }
+export function getScans({ status, page = 0, size = 50 } = {}) {
+  const query = new URLSearchParams({ page: String(page), size: String(size) });
+  if (status) query.set('status', status);
+  return request(`/scans?${query}`);
+}
+export function getQueueStatus() { return request('/scans/queue-status'); }
 export function getGraph(scanId) { return request(`/scans/${scanId}/graph`); }
 export function getViolations(scanId) { return request(`/scans/${scanId}/violations`); }
 export function getRepositoryHistory(repositoryId) { return request(`/repos/${repositoryId}/history`); }

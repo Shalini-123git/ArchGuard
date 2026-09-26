@@ -13,6 +13,31 @@ header { margin-bottom: 1.75rem; } h1, h2, h3, p { margin-top: 0; } h1 { margin-
 .error-banner { align-items: center; background: #fff1f2; border-color: #fda4af; color: #9f1239; display: flex; gap: 1rem; justify-content: space-between; margin-bottom: 1rem; } .error-banner button { background: transparent; color: #9f1239; padding: .25rem; }
 .results-header, .toolbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; } .results-actions, .trend-header { align-items: center; display: flex; gap: 1rem; } .current-score, .score { white-space: nowrap; } .secondary { background: #e6ebf4; color: #172033; } .secondary:hover { background: #d7dfeb; }
 .health-trend { margin: 1rem 0; } .health-trend h3 { margin-bottom: 0; } .score { border-radius: 99px; font-size: 1.1rem; padding: .45rem .75rem; } .healthy { background: #dcfce7; color: #166534; } .watch { background: #fef3c7; color: #92400e; } .risk { background: #fee2e2; color: #b91c1c; } .trend-chart { align-items: end; border-bottom: 1px solid #b9c5d8; display: flex; gap: .75rem; height: 130px; margin-top: 1rem; overflow-x: auto; padding: 0 .5rem; } .trend-point { align-items: center; display: flex; flex: 0 0 2.2rem; flex-direction: column; height: 100%; justify-content: end; } .trend-bar { border-radius: .3rem .3rem 0 0; min-height: 4px; width: 100%; } .trend-point small { color: #526177; font-size: .7rem; margin-top: .2rem; } .trend-help { color: #526177; font-size: .8rem; margin: .75rem 0 0; }
+.app-nav { display: flex; gap: .5rem; margin-top: 1rem; }
+.app-nav button[aria-pressed="true"] { background: #172033; color: #fff; }
+.queue-heading { align-items: center; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; }
+.queue-heading h2 { margin-bottom: 0; }
+.queue-summary { align-items: center; background: #f3f6fa; border-left: 4px solid #15803d; display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; padding: .8rem 1rem; }
+.queue-summary strong { color: #166534; }
+.queue-toolbar { align-items: center; display: flex; gap: .6rem; margin: 1.25rem 0 .75rem; }
+.queue-toolbar label { font-size: .88rem; font-weight: 700; }
+.queue-toolbar select { background: #fff; border: 1px solid #b9c5d8; border-radius: .4rem; padding: .45rem .6rem; }
+.scan-table-wrap { overflow-x: auto; }
+.scan-table { border-collapse: collapse; min-width: 760px; text-align: left; width: 100%; }
+.scan-table th { background: #f3f6fa; color: #37465c; font-size: .76rem; text-transform: uppercase; }
+.scan-table th, .scan-table td { border-bottom: 1px solid #e5eaf2; padding: .75rem .65rem; vertical-align: middle; }
+.scan-table td { font-size: .87rem; }
+.scan-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.scan-source { max-width: 300px; overflow-wrap: anywhere; }
+.scan-row-stuck { background: #fff7ed; box-shadow: inset 4px 0 #ea580c; }
+.scan-row-stuck td { border-bottom-color: #fed7aa; }
+.stuck-label { color: #9a3412; display: block; font-size: .72rem; font-weight: 800; margin-top: .3rem; }
+.results-link { color: #1d4ed8; font-weight: 700; }
+.empty-scans { color: #526177; padding: 2rem !important; text-align: center; }
+.queue-error { background: #fff1f2; color: #9f1239; padding: .7rem; }
+.queue-pagination { align-items: center; display: flex; gap: .8rem; justify-content: end; margin-top: 1rem; }
+.queue-pagination button { padding: .5rem .8rem; }
+.queue-pagination button:disabled { cursor: not-allowed; }
 .toolbar { align-items: end; border-top: 1px solid #e5eaf2; border-bottom: 1px solid #e5eaf2; flex-wrap: wrap; margin: 1.25rem 0; padding: .85rem 0; } .toolbar label { flex: 1 1 220px; font-size: .85rem; font-weight: 700; } .toolbar p { color: #526177; font-size: .9rem; margin-bottom: .6rem; }
 .dashboard-grid { display: grid; gap: 1rem; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); } .graph-section { min-height: 570px; } .graph-canvas { height: 535px; width: 100%; } .graph-empty { align-items: center; background: #f8fafc; border: 1px dashed #b9c5d8; display: flex; justify-content: center; min-height: 570px; padding: 2rem; text-align: center; }
 .graph-legend { color: #526177; display: flex; flex-wrap: wrap; font-size: .8rem; gap: 1rem; } .graph-legend span { align-items: center; display: flex; gap: .3rem; } .graph-legend i { display: inline-block; } .legend-node { background: #2563eb; border-radius: 50%; height: .8rem; width: .8rem; } .legend-cycle { border: 3px double #f59e0b; border-radius: 50%; height: .8rem; width: .8rem; } .legend-edge { background: #dc2626; height: 3px; width: 1.1rem; }
