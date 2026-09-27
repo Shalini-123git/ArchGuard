@@ -22,11 +22,17 @@ public final class ProjectScanner {
 
     public List<Path> findJavaFiles(Path root, ScanOptions options) {
         List<Path> javaFiles = new ArrayList<>();
+        Path normalizedRoot = root.toAbsolutePath().normalize();
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
                     if (SKIPPED_DIRECTORY_NAMES.contains(directory.getFileName().toString())) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    Path normalizedDirectory = directory.toAbsolutePath().normalize();
+                    if (!normalizedDirectory.equals(normalizedRoot)
+                            && options.excludedPaths().contains(normalizedDirectory)) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     return FileVisitResult.CONTINUE;

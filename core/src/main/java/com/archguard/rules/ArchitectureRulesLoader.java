@@ -32,6 +32,24 @@ public final class ArchitectureRulesLoader {
         }
     }
 
+    /** Loads rule text supplied by an API caller without requiring a temporary rules file. */
+    public ArchitectureRules load(String yamlText) {
+        if (yamlText == null || yamlText.isBlank()) {
+            throw new IllegalArgumentException("Rules YAML is empty");
+        }
+        Path source = Path.of("request-rules.yml");
+        try {
+            ArchitectureRules rules = objectMapper.readValue(yamlText, ArchitectureRules.class);
+            if (rules == null) {
+                throw new IllegalArgumentException("Rules YAML is empty");
+            }
+            validate(rules, source);
+            return rules;
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Could not read rules YAML: " + exception.getMessage(), exception);
+        }
+    }
+
     private static void validate(ArchitectureRules rules, Path file) {
         Set<String> layerNames = new HashSet<>();
         for (LayerRule layer : rules.getLayers()) {

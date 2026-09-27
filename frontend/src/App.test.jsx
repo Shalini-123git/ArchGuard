@@ -1,0 +1,69 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import App from './App.jsx';
+import ResultsPage from './components/ResultsPage.jsx';
+
+vi.mock('cytoscape', () => ({
+  default: vi.fn(() => ({
+    destroy: vi.fn(),
+    edges: vi.fn(() => ({ length: 0 })),
+    on: vi.fn()
+  }))
+}));
+
+const scan = {
+  id: 'scan-1', repositoryId: 'repository-1', repositoryUrl: 'https://github.com/acme/example.git',
+  status: 'COMPLETED', healthScore: 80
+};
+
+const graph = {
+  modules: [
+    { id: 'com.example.web', layer: 'web', cycleMember: false },
+    { id: 'com.example.data', layer: 'repository', cycleMember: false }
+  ],
+  dependencies: [{ id: 'edge-1', from: 'com.example.web', to: 'com.example.data', violationIds: ['violation-1'] }]
+};
+
+const violations = [{
+  id: 'violation-1', ruleId: 'forbidden:web->repository', fromModule: 'com.example.web',
+  toModule: 'com.example.data', blastRadiusCount: 2, explanation: 'Web depends on data.', explanationFallback: true
+}];
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('dashboard', () => {
+  it('submits a scan, polls it, and renders completed results', async () => {
+    const queuedScan = { ...scan, status: 'QUEUED', healthScore: null };
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(queuedScan, 202))
+      .mockResolvedValueOnce(response(scan))
+      .mockResolvedValueOnce(response(graph))
+      .mockResolvedValueOnce(response(violations))
+      .mockResolvedValueOnce(response([scan]));
+    vi.stubGlobal('fetch', fetch);
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Repository URL'), { target: { value: scan.repositoryUrl } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start scan' }));
+
+    await waitFor(() => expect(screen.getByText(scan.repositoryUrl)).toBeTruthy(), { timeout: 2_000 });
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      '/api/scans', '/api/scans/scan-1', '/api/scans/scan-1/graph',
+      '/api/scans/scan-1/violations', '/api/repos/repository-1/history'
+    ]);
+  });
+
+  it('filters packages and shows selected violation details', () => {
+    render(<ResultsPage scan={scan} results={{ graph, violations, history: [scan] }} onStartOver={vi.fn()} />);
+
+    fireEvent.change(screen.getByPlaceholderText('com.example'), { target: { value: 'data' } });
+    expect(screen.getByText('Showing 1 of 2 nodes')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /forbidden:web->repository/i }));
+    expect(screen.getByText('Web depends on data.')).toBeTruthy();
+    expect(screen.getByText('Deterministic fallback explanation')).toBeTruthy();
+  });
+});
+
+function response(body, status = 200) {
+  return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) };
+}

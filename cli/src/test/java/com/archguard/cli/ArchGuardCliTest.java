@@ -38,6 +38,24 @@ class ArchGuardCliTest {
     }
 
     @Test
+    void scanCanExcludeTheSampleProjectFromRepositoryScan() {
+        Path repositoryRoot = locateSampleProject().getParent();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ArchGuardCli cli = new ArchGuardCli(
+                new com.archguard.analysis.ProjectAnalyzer(),
+                new PrintStream(output, true, StandardCharsets.UTF_8),
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8)
+        );
+
+        int exitCode = cli.run(new String[] {"scan", repositoryRoot.toString(), "--exclude", "sample-project"});
+        String text = output.toString(StandardCharsets.UTF_8);
+
+        assertEquals(0, exitCode);
+        assertTrue(text.contains("Parse failures: 0"));
+        assertTrue(!text.contains("Broken.java"));
+    }
+
+    @Test
     void rejectsInvalidArguments() {
         ByteArrayOutputStream error = new ByteArrayOutputStream();
         ArchGuardCli cli = new ArchGuardCli(
@@ -64,7 +82,7 @@ class ArchGuardCliTest {
         );
         int exitCode = cli.run(new String[] {"scan", sampleProject.toString(), "--rules", rules.toString()});
         String text = output.toString(StandardCharsets.UTF_8);
-        assertEquals(0, exitCode);
+        assertEquals(2, exitCode);
         assertTrue(text.contains("Cycles: 1"));
         assertTrue(text.contains("Violations: 2"));
         assertTrue(text.contains("forbidden:controller->repository"));

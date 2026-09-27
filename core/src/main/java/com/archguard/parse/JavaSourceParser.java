@@ -24,6 +24,7 @@ public final class JavaSourceParser implements LanguageParser {
 
     public JavaSourceParser() {
         ParserConfiguration configuration = new ParserConfiguration();
+        configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
         configuration.setCharacterEncoding(StandardCharsets.UTF_8);
         configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
         this.javaParser = new JavaParser(configuration);
