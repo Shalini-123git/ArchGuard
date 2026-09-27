@@ -44,8 +44,7 @@ jobs:
             exit "$scan_status"
           fi
       - name: Post or update summary comment
-        if: always() && github.event.pull_request.head.repo.full_name == github.repository
-        continue-on-error: true
+        if: always() && github.event.pull_request.head.repo.fork == false
         uses: actions/github-script@v7
         env:
           SCAN_STATUS: ${{ steps.scan.outputs.status }}
@@ -59,23 +58,15 @@ jobs:
             const marker = '<!-- archguard-pr-check -->';
             const failed = process.env.SCAN_STATUS !== '0';
             const verdict = failed ? '❌ Violations found' : '✅ No violations found';
-            const body = `${marker}\n## ArchGuard\n\n${verdict}\n\n| Packages | Edges | Parse failures | Cycles | Violations |\n| ---: | ---: | ---: | ---: | ---: |\n| ${process.env.PACKAGES || 'n/a'} | ${process.env.EDGES || 'n/a'} | ${process.env.PARSE_FAILURES || 'n/a'} | ${process.env.CYCLES || 'n/a'} | ${process.env.VIOLATIONS || 'n/a'} |`;
+            const body = `${marker}\n## ArchGuard\n\n${verdict}\n\n| Packages | Edges | Parse failures | Cycles | Violations |\n| ---: | ---: | ---: | ---: | ---: |\n| ${process.env.PACKAGES || 'n/a'} | ${process.env.EDGES || 'n/a'} | ${process.env.PARSE_FAILURES || 'n/a'} | ${process.env.CYCLES || 'n/a'} | ${process.env.VIOLATIONS || 'n/a'} |\n`;
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
-            try {
-              const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
-              const existing = comments.find((comment) => comment.user.type === 'Bot' && comment.body.includes(marker));
-              if (existing) {
-                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
-              } else {
-                await github.rest.issues.createComment({ owner, repo, issue_number, body });
-              }
-            } catch (error) {
-              if (error.status === 403) {
-                core.warning('The workflow token cannot write pull-request comments; the scan result remains authoritative.');
-                return;
-              }
-              throw error;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.find((comment) => comment.user.type === 'Bot' && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
       - name: Fail when violations are found
         if: steps.scan.outputs.status == '2'
