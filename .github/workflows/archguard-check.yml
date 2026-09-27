@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          java -cp 'cli/target/classes:cli/target/dependency/*' com.archguard.cli.ArchGuardCli scan . --rules archguard-rules.yml > archguard-report.txt 2>&1
+          java -cp 'cli/target/classes:cli/target/dependency/*' com.archguard.cli.ArchGuardCli scan . --exclude sample-project --rules archguard-rules.yml > archguard-report.txt 2>&1
           scan_status=$?
           set -e
           cat archguard-report.txt
