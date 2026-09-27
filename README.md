@@ -114,11 +114,17 @@ Open `http://localhost:5173`. Vite proxies `/api` to the Spring API at `http://l
 ### Run the Docker stack
 
 ```powershell
+docker compose up --build
+```
+
+The Compose file has safe local defaults for PostgreSQL and the web port, so copying `.env.example` is optional for a first run. Copy it when you want to change the password, port, or LLM settings:
+
+```powershell
 Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Open `http://localhost:8080`. In this mode nginx serves the built dashboard and proxies `/api` to the API container.
+Open `http://localhost:8080`. In this mode nginx serves the built dashboard and proxies `/api` to the API container. Flyway creates the database schema automatically when the API starts.
 
 ## Configuration
 
@@ -131,6 +137,8 @@ Open `http://localhost:8080`. In this mode nginx serves the built dashboard and 
 | `ARCHGUARD_MAX_CLONE_BYTES` | Maximum remote clone size. |
 | `ARCHGUARD_CLONE_TIMEOUT` | JGit transport timeout. |
 | `ARCHGUARD_SCAN_*` | Bounded scan executor settings. |
+| `VITE_SCAN_QUEUE_POLL_INTERVAL_MS` | Dashboard queue refresh interval in milliseconds (default `5000`). |
+| `VITE_SCAN_STUCK_THRESHOLD_MS` | Active-scan age before the dashboard highlights it (default `120000`). |
 | `LLM_API_KEY` | Optional Groq-compatible API key. |
 | `ARCHGUARD_LLM_MODEL` | Optional LLM model name. |
 | `ARCHGUARD_LLM_BLAST_RADIUS_LIMIT` | Maximum blast-radius packages in prompts. |
@@ -172,10 +180,14 @@ POST /api/scans
   -> scan becomes COMPLETED or FAILED
 
 GET /api/scans/{id}
+GET /api/scans?status=RUNNING&page=0&size=50
+GET /api/scans/queue-status
 GET /api/scans/{id}/graph
 GET /api/scans/{id}/violations
 GET /api/repos/{repositoryId}/history
 ```
+
+The scan list returns `ScanResponse` items ordered newest first; `status` is optional and `page` is zero-based. Queue status combines live executor measurements with queued/running database counts. On API startup, orphaned `QUEUED` and `RUNNING` scans are marked `FAILED` with an interruption message; they are not retried because analysis persistence is not yet restart-idempotent.
 
 ## Dashboard screenshots
 
