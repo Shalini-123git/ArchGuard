@@ -1,0 +1,22 @@
+# Adds a Caddy reverse proxy with automatic HTTPS in front of the "web" container.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env up -d --build
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  caddy-data:
+  caddy-config:

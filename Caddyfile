@@ -1,0 +1,4 @@
+# Replace with your real domain (must already point at this server's IP via DNS A record)
+yourdomain.com {
+    reverse_proxy web:80
+}
