@@ -3,6 +3,7 @@ import { createScan, getGraph, getRepositoryHistory, getScan, getViolations } fr
 import ScanForm from './components/ScanForm.jsx';
 import ScanStatus from './components/ScanStatus.jsx';
 import ResultsPage from './components/ResultsPage.jsx';
+import ScanQueueDashboard from './components/ScanQueueDashboard.jsx';
 
 export default function App() {
   const [scan, setScan] = useState(null);
@@ -10,6 +11,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [view, setView] = useState('form');
 
   useEffect(() => {
     if (!scan || !['QUEUED', 'RUNNING'].includes(scan.status)) return undefined;
@@ -30,17 +32,21 @@ export default function App() {
 
   async function submit(values) {
     setSubmitting(true); setError(null); setResults(null); setLoadingResults(false);
-    try { setScan(await createScan(values)); } catch (requestError) { setError(requestError.message); }
+    try { setScan(await createScan(values)); setView('status'); } catch (requestError) { setError(requestError.message); }
     finally { setSubmitting(false); }
   }
 
-  function startOver() { setScan(null); setResults(null); setError(null); setLoadingResults(false); }
+  function startOver() { setScan(null); setResults(null); setError(null); setLoadingResults(false); setView('form'); }
+  function openResults(selectedScan) { setScan(selectedScan); setResults(null); setError(null); setView('status'); }
 
   return <main className="app-shell">
-    <header><p className="eyebrow">ARCHITECTURE OBSERVABILITY</p><h1>ArchGuard</h1><p>Static facts first. Clear explanations second.</p></header>
+    <header><p className="eyebrow">ARCHITECTURE OBSERVABILITY</p><h1>ArchGuard</h1><p>Static facts first. Clear explanations second.</p>
+      <nav className="app-nav" aria-label="Scan views"><button className="secondary" aria-pressed={view === 'queue'} onClick={() => setView('queue')}>Scan queue</button>
+        <button className="secondary" aria-pressed={view === 'form'} onClick={startOver}>New scan</button></nav></header>
     {error && <div className="error-banner" role="alert">{error}<button onClick={() => setError(null)}>Dismiss</button></div>}
-    {!scan && <ScanForm onSubmit={submit} submitting={submitting} />}
-    {scan && !results && <ScanStatus scan={scan} loadingResults={loadingResults} onStartOver={startOver} />}
-    {results && <ResultsPage scan={scan} results={results} onStartOver={startOver} />}
+    {view === 'queue' && <ScanQueueDashboard onOpenResults={openResults} />}
+    {view === 'form' && <ScanForm onSubmit={submit} submitting={submitting} />}
+    {view === 'status' && scan && !results && <ScanStatus scan={scan} loadingResults={loadingResults} onStartOver={startOver} />}
+    {view === 'status' && results && <ResultsPage scan={scan} results={results} onStartOver={startOver} />}
   </main>;
 }

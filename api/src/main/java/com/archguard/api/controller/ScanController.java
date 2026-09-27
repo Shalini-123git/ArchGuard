@@ -2,8 +2,10 @@ package com.archguard.api.controller;
 
 import com.archguard.api.dto.CreateScanRequest;
 import com.archguard.api.dto.GraphResponse;
+import com.archguard.api.dto.QueueStatusResponse;
 import com.archguard.api.dto.ScanResponse;
 import com.archguard.api.dto.ViolationResponse;
+import com.archguard.api.persistence.ScanStatus;
 import com.archguard.api.service.ScanService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,6 +31,16 @@ public class ScanController {
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ScanResponse create(@Valid @RequestBody CreateScanRequest request) { return scanService.queue(request); }
+
+    @GetMapping
+    public List<ScanResponse> list(@RequestParam(required = false) ScanStatus status,
+                                  @RequestParam(defaultValue = "0") int page,
+                                  @RequestParam(defaultValue = "50") int size) {
+        return scanService.list(status, page, size);
+    }
+
+    @GetMapping("/queue-status")
+    public QueueStatusResponse queueStatus() { return scanService.queueStatus(); }
 
     @GetMapping("/{scanId}")
     public ScanResponse get(@PathVariable UUID scanId) { return scanService.get(scanId); }

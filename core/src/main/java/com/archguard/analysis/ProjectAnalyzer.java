@@ -11,6 +11,9 @@ import com.archguard.parse.ParsedJavaFile;
 import com.archguard.rules.ArchitectureRules;
 import com.archguard.scan.ProjectScanner;
 import com.archguard.scan.ScanOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,6 +26,7 @@ import java.util.Set;
  * Walks a project, parses Java sources, builds the package graph, finds cycles, and applies YAML rules when given.
  */
 public final class ProjectAnalyzer {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProjectAnalyzer.class);
 
     private final ProjectScanner projectScanner;
     private final LanguageParser languageParser;
@@ -72,6 +76,7 @@ public final class ProjectAnalyzer {
             throw new IllegalArgumentException("Scan path is not a directory: " + root);
         }
         List<Path> javaFiles = projectScanner.findJavaFiles(root, options);
+        LOGGER.info("scanId={} stage=parsing started javaFileCount={}", scanId(), javaFiles.size());
         Set<String> projectPackages = new LinkedHashSet<>();
         List<ParsedJavaFile> parsedFiles = new ArrayList<>();
         List<ParseFailure> parseFailures = new ArrayList<>();
@@ -89,11 +94,26 @@ public final class ProjectAnalyzer {
             }
         }
 
+        LOGGER.info("scanId={} stage=parsing completed parsedFileCount={} parseFailureCount={}", scanId(), parsedFiles.size(), parseFailures.size());
+        LOGGER.info("scanId={} stage=graph_build started packageCount={}", scanId(), projectPackages.size());
         PackageDependencyGraph graph = graphBuilder.build(projectPackages, parsedFiles);
+        LOGGER.info("scanId={} stage=graph_build completed dependencyCount={}", scanId(), graph.dependencies().size());
+        LOGGER.info("scanId={} stage=cycle_detection started", scanId());
         List<DependencyCycle> cycles = cycleDetector.detect(graph);
+        LOGGER.info("scanId={} stage=cycle_detection completed cycleCount={}", scanId(), cycles.size());
+        LOGGER.info("scanId={} stage=rule_check started configured={}", scanId(), rules != null);
+        LOGGER.info("scanId={} stage=blast_radius started", scanId());
         List<ArchitectureViolation> violations = rules == null
                 ? List.of()
                 : architectureChecker.check(graph, cycles, rules);
+        int affectedPackageCount = violations.stream().mapToInt(ArchitectureViolation::getBlastRadiusCount).sum();
+        LOGGER.info("scanId={} stage=blast_radius completed affectedPackageCount={}", scanId(), affectedPackageCount);
+        LOGGER.info("scanId={} stage=rule_check completed violationCount={}", scanId(), violations.size());
         return new ScanReport(graph, cycles, parseFailures, violations);
+    }
+
+    private String scanId() {
+        String scanId = MDC.get("scanId");
+        return scanId == null ? "unknown" : scanId;
     }
 }
