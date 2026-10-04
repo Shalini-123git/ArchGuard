@@ -25,6 +25,8 @@ archguard:
     connect-timeout: ${ARCHGUARD_LLM_CONNECT_TIMEOUT:5s}
     read-timeout: ${ARCHGUARD_LLM_READ_TIMEOUT:20s}
     retry-backoff: ${ARCHGUARD_LLM_RETRY_BACKOFF:500ms}
+    max-tokens: ${ARCHGUARD_LLM_MAX_TOKENS:1500}
+    delay-between-calls-ms: ${ARCHGUARD_LLM_DELAY_BETWEEN_CALLS_MS:400}
     blast-radius-limit: ${ARCHGUARD_LLM_BLAST_RADIUS_LIMIT:10}
     snippet-line-limit: ${ARCHGUARD_LLM_SNIPPET_LINE_LIMIT:3}
     violations-per-scan-limit: ${ARCHGUARD_LLM_VIOLATIONS_PER_SCAN_LIMIT:20}

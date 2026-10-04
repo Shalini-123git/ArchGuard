@@ -70,6 +70,51 @@ class ScanControllerIntegrationTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("repoUrl must be an HTTPS repository URL"));
     }
 
+    @Test
+    void returnsDefaultRulesWhenScanHasNoRules() throws Exception {
+        String scanId = queueLocalScan(null);
+        waitForCompletion(scanId);
+        mockMvc.perform(get("/api/scans/{id}/rules", scanId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.custom").value(false))
+                .andExpect(jsonPath("$.rulesYaml").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.rules.layers").isEmpty())
+                .andExpect(jsonPath("$.rules.forbidden").isEmpty())
+                .andExpect(jsonPath("$.rules.noCycles").value(true));
+    }
+
+    @Test
+    void returnsParsedCustomRules() throws Exception {
+        String yaml = "layers:\n  - name: web\n    packagePatterns: [com.example.web]\n  - name: repository\n    packagePatterns: [com.example.data]\nforbidden:\n  - from: web\n    to: repository\n    severity: MEDIUM\nnoCycles: false\n";
+        String scanId = queueLocalScan(yaml);
+        waitForCompletion(scanId);
+        mockMvc.perform(get("/api/scans/{id}/rules", scanId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.custom").value(true))
+                .andExpect(jsonPath("$.rulesYaml").value(yaml))
+                .andExpect(jsonPath("$.rules.layers[0].name").value("web"))
+                .andExpect(jsonPath("$.rules.layers[0].packagePatterns[0]").value("com.example.web"))
+                .andExpect(jsonPath("$.rules.forbidden[0].severity").value("MEDIUM"))
+                .andExpect(jsonPath("$.rules.noCycles").value(false));
+    }
+
+    @Test
+    void unknownScanRulesReturnsNotFound() throws Exception {
+        String missingId = "00000000-0000-0000-0000-000000000000";
+        mockMvc.perform(get("/api/scans/{id}/rules", missingId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Scan not found: " + missingId));
+    }
+
+    private String queueLocalScan(String rulesYaml) throws Exception {
+        String sampleProject = Path.of("..", "sample-project").toAbsolutePath().normalize().toString();
+        var requestNode = objectMapper.createObjectNode().put("localPath", sampleProject);
+        if (rulesYaml != null) requestNode.put("rulesYaml", rulesYaml);
+        String response = mockMvc.perform(post("/api/scans").contentType(MediaType.APPLICATION_JSON)
+                        .content(requestNode.toString())).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asText();
+    }
+
     private JsonNode waitForCompletion(String scanId) throws Exception {
         JsonNode result = null;
         for (int attempt = 0; attempt < 50; attempt++) {

@@ -9,4 +9,5 @@ import java.util.UUID;
 /** Database access for persisted package nodes. */
 public interface ModuleJpaRepository extends JpaRepository<ModuleEntity, UUID> {
     List<ModuleEntity> findByScanIdOrderByName(UUID scanId);
+    void deleteByScanId(UUID scanId);
 }

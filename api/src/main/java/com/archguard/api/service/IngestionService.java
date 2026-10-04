@@ -4,7 +4,9 @@ import com.archguard.api.config.ArchGuardProperties;
 import com.archguard.api.exception.BadRequestException;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.ProgressMonitor;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 import java.net.URI;
@@ -18,8 +20,17 @@ import java.util.function.Function;
 @Service
 public class IngestionService {
     private final ArchGuardProperties properties;
+    private final ScanCancellationRegistry cancellationRegistry;
 
-    public IngestionService(ArchGuardProperties properties) { this.properties = properties; }
+    @Autowired
+    public IngestionService(ArchGuardProperties properties, ScanCancellationRegistry cancellationRegistry) {
+        this.properties = properties;
+        this.cancellationRegistry = cancellationRegistry;
+    }
+
+    public IngestionService(ArchGuardProperties properties) {
+        this(properties, new ScanCancellationRegistry());
+    }
 
     public <T> T withRemoteRepository(String repositoryUrl, Function<ProjectSource, T> operation) {
         validateRemoteUrl(repositoryUrl);
@@ -32,11 +43,20 @@ public class IngestionService {
                     .setDepth(1)
                     .setCloneAllBranches(false)
                     .setTimeout(timeoutSeconds())
+                    .setProgressMonitor(new ProgressMonitor() {
+                        public void start(int totalTasks) { }
+                        public void beginTask(String title, int totalWork) { }
+                        public void update(int completed) { }
+                        public void endTask() { }
+                        public void showDuration(boolean enabled) { }
+                        public boolean isCancelled() { var id = currentScanId(); return id != null && cancellationRegistry.isCancelled(id); }
+                    })
                     .call()) {
                 enforceCloneSize(tempDirectory);
                 String commitSha = git.getRepository().resolve(Constants.HEAD).name();
                 return operation.apply(new ProjectSource(tempDirectory, commitSha));
             }
+
         } catch (IOException exception) {
             throw new BadRequestException("Could not prepare repository scan: " + exception.getMessage());
         } catch (Exception exception) {
@@ -47,6 +67,11 @@ public class IngestionService {
         } finally {
             deleteTemporaryDirectory(tempDirectory);
         }
+    }
+
+    private java.util.UUID currentScanId() {
+        String value = org.slf4j.MDC.get("scanId");
+        return value == null ? null : java.util.UUID.fromString(value);
     }
 
     public void validateRemoteUrl(String repositoryUrl) {

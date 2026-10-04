@@ -7,6 +7,8 @@ import com.archguard.api.persistence.ViolationEntity;
 import com.archguard.api.repository.ExplanationCacheRepository;
 import com.archguard.api.repository.ViolationJpaRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
@@ -30,7 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class ViolationExplanationServiceTest {
     @Mock private ViolationJpaRepository violations;
     @Mock private ExplanationCacheRepository cache;
@@ -70,21 +72,39 @@ class ViolationExplanationServiceTest {
     }
 
     @Test
-    void providerFailureUsesAndCachesDeterministicFallback() {
+    void providerFailureUsesDeterministicFallbackWithoutCaching(CapturedOutput output) {
         ArchGuardProperties properties = properties(10, 3, 20);
         ViolationExplanationService service = service(properties);
         ViolationEntity violation = violation("from", "to", List.of());
         when(violations.findWithAffectedModulesByScanId(any())).thenReturn(List.of(violation));
         when(cache.findById(anyString())).thenReturn(Optional.empty());
-        when(client.explain(any())).thenThrow(new IllegalStateException("timeout"));
+        when(client.explain(any())).thenThrow(new IllegalStateException("Groq hit max_tokens before producing an explanation"));
 
         service.explainScan(UUID.randomUUID(), project);
 
         assertTrue(violation.isExplanationFallback());
         assertTrue(violation.getExplanation().contains("Why it is a problem"));
-        ArgumentCaptor<ExplanationCacheEntity> saved = ArgumentCaptor.forClass(ExplanationCacheEntity.class);
-        verify(cache).save(saved.capture());
-        assertTrue(saved.getValue().isFallback());
+        verify(cache, never()).save(any(ExplanationCacheEntity.class));
+        assertTrue(output.getOut().contains("LLM explanation failed for violation"));
+        assertTrue(output.getOut().contains("ruleId=forbidden:web->repository"));
+        assertTrue(output.getOut().contains("Groq hit max_tokens before producing an explanation"));
+    }
+
+    @Test
+    void fallbackCacheEntryIsIgnoredAndProviderIsCalledAgain() {
+        ArchGuardProperties properties = properties(10, 3, 20);
+        ViolationExplanationService service = service(properties);
+        ViolationEntity violation = violation("from", "to", List.of());
+        when(violations.findWithAffectedModulesByScanId(any())).thenReturn(List.of(violation));
+        when(cache.findById(anyString())).thenReturn(Optional.of(new ExplanationCacheEntity("hash", "old fallback", true)));
+        when(client.explain(any())).thenReturn("real explanation");
+
+        service.explainScan(UUID.randomUUID(), project);
+
+        assertEquals("real explanation", violation.getExplanation());
+        assertTrue(!violation.isExplanationFallback());
+        verify(client).explain(any());
+        verify(cache).save(any(ExplanationCacheEntity.class));
     }
 
     @Test

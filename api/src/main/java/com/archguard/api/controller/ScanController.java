@@ -3,6 +3,7 @@ package com.archguard.api.controller;
 import com.archguard.api.dto.CreateScanRequest;
 import com.archguard.api.dto.GraphResponse;
 import com.archguard.api.dto.QueueStatusResponse;
+import com.archguard.api.dto.RulesResponse;
 import com.archguard.api.dto.ScanResponse;
 import com.archguard.api.dto.ViolationResponse;
 import com.archguard.api.persistence.ScanStatus;
@@ -45,9 +46,15 @@ public class ScanController {
     @GetMapping("/{scanId}")
     public ScanResponse get(@PathVariable UUID scanId) { return scanService.get(scanId); }
 
+    @PostMapping("/{scanId}/cancel")
+    public ScanResponse cancel(@PathVariable UUID scanId) { return scanService.cancel(scanId); }
+
     @GetMapping("/{scanId}/graph")
     public GraphResponse graph(@PathVariable UUID scanId) { return scanService.graph(scanId); }
 
     @GetMapping("/{scanId}/violations")
     public List<ViolationResponse> violations(@PathVariable UUID scanId) { return scanService.violations(scanId); }
+
+    @GetMapping("/{scanId}/rules")
+    public RulesResponse rules(@PathVariable UUID scanId) { return scanService.rulesView(scanId); }
 }

@@ -7,6 +7,8 @@ import com.archguard.api.repository.ExplanationCacheRepository;
 import com.archguard.api.repository.ViolationJpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,10 +19,13 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
+import com.archguard.analysis.ScanCancelledException;
 
-/** Explains a bounded number of persisted violations, caching both provider and fallback results. */
+/** Explains a bounded number of persisted violations and caches provider results. */
 @Service
 public class ViolationExplanationService {
+    private static final Logger log = LoggerFactory.getLogger(ViolationExplanationService.class);
     private final ViolationJpaRepository violations;
     private final ExplanationCacheRepository cache;
     private final LlmClient llmClient;
@@ -33,16 +38,27 @@ public class ViolationExplanationService {
 
     @Transactional
     public void explainScan(java.util.UUID scanId, Path projectRoot) {
+        explainScan(scanId, projectRoot, () -> false);
+    }
+
+    @Transactional
+    public void explainScan(java.util.UUID scanId, Path projectRoot, BooleanSupplier cancelled) {
         List<ViolationEntity> selected = violations.findWithAffectedModulesByScanId(scanId).stream()
                 .sorted(Comparator.comparing(ViolationEntity::getRuleId).thenComparing(v -> moduleName(v.getSourceModule())))
                 .limit(properties.getViolationsPerScanLimit()).toList();
-        for (ViolationEntity violation : selected) {
+        for (int index = 0; index < selected.size(); index++) {
+            if (cancelled.getAsBoolean()) throw new ScanCancelledException();
+            ViolationEntity violation = selected.get(index);
             ViolationContext context = context(violation, projectRoot);
             String hash = hash(context);
             ExplanationResult result = cache.findById(hash)
-                    .map(value -> new ExplanationResult(value.getExplanation(), value.isFallback()))
-                    .orElseGet(() -> createAndCache(hash, context));
+                    .filter(value -> !value.isFallback())
+                    .map(value -> new ExplanationResult(value.getExplanation(), false))
+                    .orElseGet(() -> createAndCache(hash, context, violation));
             violation.setExplanation(result.text(), result.fallback());
+            violations.save(violation);
+            if (index < selected.size() - 1) sleepBetweenCalls();
+            if (cancelled.getAsBoolean()) throw new ScanCancelledException();
         }
     }
 
@@ -54,17 +70,27 @@ public class ViolationExplanationService {
         return new ViolationContext(ruleDescription(violation), from, to, blastRadius, importLines(root, to));
     }
 
-    private ExplanationResult createAndCache(String hash, ViolationContext context) {
+    private ExplanationResult createAndCache(String hash, ViolationContext context, ViolationEntity violation) {
         ExplanationResult result;
         try {
             result = new ExplanationResult(llmClient.explain(context), false);
         } catch (RuntimeException exception) {
-            System.err.println("LLM EXPLANATION FAILED: " + exception.getMessage());
-            exception.printStackTrace();
+            log.warn("LLM explanation failed for violation id={} ruleId={}: {}",
+                    violation.getId(), violation.getRuleId(), exception.getMessage());
             result = new ExplanationResult(fallback(context), true);
         }
-        cache.save(new ExplanationCacheEntity(hash, result.text(), result.fallback()));
+        if (!result.fallback()) cache.save(new ExplanationCacheEntity(hash, result.text(), false));
         return result;
+    }
+
+    private void sleepBetweenCalls() {
+        if (properties.getDelayBetweenCallsMs() <= 0) return;
+        try {
+            Thread.sleep(properties.getDelayBetweenCallsMs());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("LLM explanation delay interrupted", exception);
+        }
     }
 
     private List<String> importLines(Path root, String toPackage) {

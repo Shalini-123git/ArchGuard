@@ -31,6 +31,30 @@ describe('DependencyGraph lifecycle', () => {
     expect(nodeElements.map(({ data }) => data.fullLabel)).toEqual(modules.map(({ id }) => id));
   });
 
+  it('limits zoom and supports double-click zoom controls', () => {
+    const zoom = vi.fn(() => 1);
+    const cy = {
+      destroy: vi.fn(),
+      edges: vi.fn(() => []),
+      elements: vi.fn(() => []),
+      fit: vi.fn(),
+      layout: vi.fn(() => ({ run: vi.fn() })),
+      nodes: vi.fn(() => []),
+      on: vi.fn(),
+      zoom
+    };
+    cytoscape.mockReturnValue(cy);
+
+    render(<DependencyGraph graph={{ modules: [{ id: 'pkg.app', layer: 'app', cycleMember: false }], dependencies: [] }} visibleNodes={[{ id: 'pkg.app', layer: 'app', cycleMember: false }]} selectedViolation={null} selectedNode={null} onNodeSelect={vi.fn()} onBackgroundSelect={vi.fn()} />);
+
+    expect(cytoscape.mock.calls[0][0]).toMatchObject({ minZoom: 0.25, maxZoom: 3 });
+    const doubleClickHandler = cy.on.mock.calls.find(([eventName]) => eventName === 'dblclick')[1];
+    doubleClickHandler({ position: { x: 10, y: 20 }, originalEvent: {} });
+    expect(zoom).toHaveBeenLastCalledWith({ level: 1.5, position: { x: 10, y: 20 } });
+    doubleClickHandler({ position: { x: 10, y: 20 }, originalEvent: { shiftKey: true } });
+    expect(zoom).toHaveBeenLastCalledWith({ level: 0.6666666666666666, position: { x: 10, y: 20 } });
+  });
+
   it('shows one colored legend entry per layer and unassigned modules', () => {
     const cy = {
       destroy: vi.fn(),

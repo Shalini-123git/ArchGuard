@@ -3,6 +3,9 @@ import cytoscape from 'cytoscape';
 import { uniqueLabels } from '../graphUtils.js';
 
 const LAYER_COLORS = ['#2563eb', '#0f766e', '#7c3aed', '#c2410c', '#4d7c0f', '#be185d'];
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 1.5;
 
 function layerColor(layer) {
   let value = 0;
@@ -53,6 +56,8 @@ export default function DependencyGraph({ graph, visibleNodes, selectedViolation
     const cy = cytoscape({
       container: container.current,
       elements,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
       style: [
         { selector: 'node', style: { 'background-color': 'data(color)', label: 'data(label)', color: '#172033', 'font-size': 12, 'font-weight': 650, 'text-background-color': '#ffffff', 'text-background-opacity': 1, 'text-background-padding': 3, 'text-wrap': 'wrap', 'text-max-width': 150, 'text-valign': 'bottom', 'text-margin-y': 6, width: 32, height: 32 } },
         { selector: 'node.selected, node.hovered', style: { label: 'data(fullLabel)' } },
@@ -70,6 +75,15 @@ export default function DependencyGraph({ graph, visibleNodes, selectedViolation
     cy.on('tap', 'node', (event) => onNodeSelect(event.target.id()));
     cy.on('mouseover', 'node', (event) => event.target.addClass('hovered'));
     cy.on('mouseout', 'node', (event) => event.target.removeClass('hovered'));
+    cy.on('dblclick', (event) => {
+      const zoomDirection = event.originalEvent?.shiftKey ? 1 / ZOOM_STEP : ZOOM_STEP;
+      const level = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cy.zoom() * zoomDirection));
+      cy.zoom({ level, position: event.position });
+    });
+    cy.on('zoom', () => {
+      if (typeof cy.style !== 'function') return;
+      cy.style().selector('node').style('font-size', cy.zoom() < 1.1 ? 0 : 12).update();
+    });
     cy.on('tap', (event) => {
       if (event.target === cy) {
         onNodeSelect(null);
@@ -122,6 +136,33 @@ export default function DependencyGraph({ graph, visibleNodes, selectedViolation
     }
   }, [selectedNode, selectedViolation, visibleEdges]);
 
+  useEffect(() => {
+    const element = container.current;
+    const cy = cyRef.current;
+    if (!element || !cy || typeof ResizeObserver === 'undefined') return undefined;
+    let timer;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        cy.resize();
+        cy.fit(cy.elements(), 50);
+      }, 150);
+    });
+    observer.observe(element);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [visibleNodes.length]);
+
+  function fitGraph() {
+    const cy = cyRef.current;
+    if (cy) {
+      cy.resize();
+      cy.fit(cy.elements(), 50);
+    }
+  }
+
   if (!visibleNodes.length) return <div className="graph-empty">No packages match the current filters.</div>;
-  return <div className="graph-section"><div className="graph-legend">{legendLayers.map(({ label, color }) => <span key={label}><i className="legend-node" style={{ background: color }} /> {label}</span>)}<span><i className="legend-cycle" /> Cycle member</span><span><i className="legend-violation" /> Violation dependency</span><span><i className="legend-normal" /> Normal dependency</span></div><div className="graph-canvas" ref={container} aria-label="Package dependency graph" /></div>;
+  return <div className="graph-section"><div className="graph-toolbar"><div className="graph-legend">{legendLayers.map(({ label, color }) => <span key={label}><i className="legend-node" style={{ background: color }} /> {label}</span>)}<span><i className="legend-cycle" /> Cycle member</span><span><i className="legend-violation" /> Violation dependency</span><span><i className="legend-normal" /> Normal dependency</span></div><button type="button" className="secondary small-button graph-fit" onClick={fitGraph}>Fit</button></div><div className="graph-canvas" ref={container} aria-label="Package dependency graph. Double-click to zoom in; Shift-double-click to zoom out." /></div>;
 }

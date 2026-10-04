@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 /**
  * Walks a project, parses Java sources, builds the package graph, finds cycles, and applies YAML rules when given.
@@ -72,6 +73,11 @@ public final class ProjectAnalyzer {
     }
 
     public ScanReport analyze(Path root, ScanOptions options, ArchitectureRules rules) {
+        return analyze(root, options, rules, () -> false);
+    }
+
+    public ScanReport analyze(Path root, ScanOptions options, ArchitectureRules rules, BooleanSupplier cancelled) {
+        checkCancelled(cancelled);
         if (!Files.isDirectory(root)) {
             throw new IllegalArgumentException("Scan path is not a directory: " + root);
         }
@@ -82,6 +88,7 @@ public final class ProjectAnalyzer {
         List<ParseFailure> parseFailures = new ArrayList<>();
 
         for (Path javaFile : javaFiles) {
+            checkCancelled(cancelled);
             ParseResult parseResult = languageParser.parse(javaFile);
             if (parseResult.isSuccessful()) {
                 ParsedJavaFile parsedFile = parseResult.getParsedFile();
@@ -95,21 +102,29 @@ public final class ProjectAnalyzer {
         }
 
         LOGGER.info("scanId={} stage=parsing completed parsedFileCount={} parseFailureCount={}", scanId(), parsedFiles.size(), parseFailures.size());
+        checkCancelled(cancelled);
         LOGGER.info("scanId={} stage=graph_build started packageCount={}", scanId(), projectPackages.size());
         PackageDependencyGraph graph = graphBuilder.build(projectPackages, parsedFiles);
         LOGGER.info("scanId={} stage=graph_build completed dependencyCount={}", scanId(), graph.dependencies().size());
+        checkCancelled(cancelled);
         LOGGER.info("scanId={} stage=cycle_detection started", scanId());
         List<DependencyCycle> cycles = cycleDetector.detect(graph);
         LOGGER.info("scanId={} stage=cycle_detection completed cycleCount={}", scanId(), cycles.size());
+        checkCancelled(cancelled);
         LOGGER.info("scanId={} stage=rule_check started configured={}", scanId(), rules != null);
         LOGGER.info("scanId={} stage=blast_radius started", scanId());
         List<ArchitectureViolation> violations = rules == null
                 ? List.of()
                 : architectureChecker.check(graph, cycles, rules);
+        checkCancelled(cancelled);
         int affectedPackageCount = violations.stream().mapToInt(ArchitectureViolation::getBlastRadiusCount).sum();
         LOGGER.info("scanId={} stage=blast_radius completed affectedPackageCount={}", scanId(), affectedPackageCount);
         LOGGER.info("scanId={} stage=rule_check completed violationCount={}", scanId(), violations.size());
         return new ScanReport(graph, cycles, parseFailures, violations);
+    }
+
+    private void checkCancelled(BooleanSupplier cancelled) {
+        if (cancelled.getAsBoolean()) throw new ScanCancelledException();
     }
 
     private String scanId() {

@@ -4,6 +4,7 @@ package com.archguard.api.persistence;
 public enum ScanStatus {
     QUEUED,
     RUNNING,
+    CANCELLED,
     COMPLETED,
     FAILED
 }
