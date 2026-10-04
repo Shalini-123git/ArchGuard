@@ -59,6 +59,8 @@ public class ViolationExplanationService {
         try {
             result = new ExplanationResult(llmClient.explain(context), false);
         } catch (RuntimeException exception) {
+            System.err.println("LLM EXPLANATION FAILED: " + exception.getMessage());
+            exception.printStackTrace();
             result = new ExplanationResult(fallback(context), true);
         }
         cache.save(new ExplanationCacheEntity(hash, result.text(), result.fallback()));

@@ -50,6 +50,21 @@ class ScanControllerIntegrationTest {
     }
 
     @Test
+    void localSampleProjectScanWithoutRulesDetectsCycles() throws Exception {
+            String sampleProject = Path.of("..", "sample-project").toAbsolutePath().normalize().toString();
+            String request = objectMapper.createObjectNode().put("localPath", sampleProject).toString();
+        String response = mockMvc.perform(post("/api/scans").contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+            String scanId = objectMapper.readTree(response).get("id").asText();
+
+        JsonNode scan = waitForCompletion(scanId);
+        assertTrue("COMPLETED".equals(scan.get("status").asText()), () -> scan.toString());
+        assertTrue(scan.get("healthScore").asInt() < 100, () -> scan.toString());
+        mockMvc.perform(get("/api/scans/{id}/violations", scanId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.ruleId == 'no-cycles')].severity").value(org.hamcrest.Matchers.hasItem("HIGH")));
+    }
+
+    @Test
     void rejectsNonHttpsRemoteUrl() throws Exception {
         mockMvc.perform(post("/api/scans").contentType(MediaType.APPLICATION_JSON).content("{\"repoUrl\":\"file:///tmp/repository\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("repoUrl must be an HTTPS repository URL"));

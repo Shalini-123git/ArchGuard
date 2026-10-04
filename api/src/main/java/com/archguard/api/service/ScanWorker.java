@@ -75,7 +75,7 @@ public class ScanWorker {
     }
 
     private ArchitectureRules rules(String rulesYaml) {
-        return rulesYaml == null || rulesYaml.isBlank() ? null : rulesLoader.load(rulesYaml);
+        return rulesYaml == null || rulesYaml.isBlank() ? new ArchitectureRules() : rulesLoader.load(rulesYaml);
     }
 
     private String safeMessage(Exception exception) {

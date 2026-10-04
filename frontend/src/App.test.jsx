@@ -6,7 +6,11 @@ import ResultsPage from './components/ResultsPage.jsx';
 vi.mock('cytoscape', () => ({
   default: vi.fn(() => ({
     destroy: vi.fn(),
-    edges: vi.fn(() => ({ length: 0 })),
+    edges: vi.fn(() => ({ length: 0, forEach: vi.fn() })),
+    elements: vi.fn(() => []),
+    fit: vi.fn(),
+    layout: vi.fn(() => ({ run: vi.fn() })),
+    nodes: vi.fn(() => []),
     on: vi.fn()
   }))
 }));
@@ -56,11 +60,37 @@ describe('dashboard', () => {
   it('filters packages and shows selected violation details', () => {
     render(<ResultsPage scan={scan} results={{ graph, violations, history: [scan] }} onStartOver={vi.fn()} />);
 
+    expect(screen.getByText('Architecture Health').parentElement.textContent).toContain('80/100');
+    expect(screen.getByText('Packages analyzed').parentElement.textContent).toContain('2');
+    expect(screen.getByText('Dependencies found').parentElement.textContent).toContain('1');
+    expect(screen.getByText('Cycles detected').parentElement.textContent).toContain('0');
+    expect(screen.getByText('Architecture violations').parentElement.textContent).toContain('1');
+    expect(screen.queryByText('Parse/analyzer warnings')).toBeNull();
+
     fireEvent.change(screen.getByPlaceholderText('com.example'), { target: { value: 'data' } });
     expect(screen.getByText('Showing 1 of 2 nodes')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /forbidden:web->repository/i }));
     expect(screen.getByText('Web depends on data.')).toBeTruthy();
-    expect(screen.getByText('Deterministic fallback explanation')).toBeTruthy();
+    expect(screen.getByText('Fallback explanation (AI service was unavailable)')).toBeTruthy();
+  });
+
+  it('renders parse warnings when the scan provides them', () => {
+    render(<ResultsPage scan={{ ...scan, parseFailureCount: 3 }} results={{ graph, violations, history: [scan] }} onStartOver={vi.fn()} />);
+
+    expect(screen.getByText('Parse/analyzer warnings').parentElement.textContent).toContain('3');
+  });
+
+  it('resets hidden filters and clears a violation when it is selected again', () => {
+    render(<ResultsPage scan={scan} results={{ graph, violations, history: [scan] }} onStartOver={vi.fn()} />);
+
+    fireEvent.change(screen.getByPlaceholderText('com.example'), { target: { value: 'data' } });
+    fireEvent.click(screen.getByRole('button', { name: /View on graph/i }));
+    expect(screen.getByPlaceholderText('com.example').value).toBe('');
+    expect(screen.getByLabelText('Layer').value).toBe('all');
+    expect(screen.getByText('Web depends on data.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /View on graph/i }));
+    expect(screen.getByText('Select a violation to focus its dependency and view its analysis.')).toBeTruthy();
   });
 });
 

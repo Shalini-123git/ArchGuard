@@ -38,6 +38,8 @@ public class GroqLlmClient implements LlmClient {
             try {
                 return request(promptBuilder.build(context));
             } catch (RuntimeException exception) {
+                System.err.println("GROQ REQUEST FAILED: " + exception.getMessage());
+                exception.printStackTrace();
                 lastFailure = exception;
                 if (attempt == 0) waitBeforeRetry();
             }

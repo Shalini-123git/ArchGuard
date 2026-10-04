@@ -168,6 +168,8 @@ noCycles: true
 
 The first matching layer wins. Unmatched packages are `unknown`. `noCycles: true` reports strongly connected components with more than one package.
 
+Cycle detection always runs, even when no rules YAML is supplied. Layer and forbidden-edge rules are optional; omit them when you only want the default cycle check.
+
 ## API workflow
 
 ```text
