@@ -203,6 +203,8 @@ Add measured screenshots here after a browser smoke test:
 
 The paths are placeholders and are intentionally not committed until real screenshots are captured.
 
+In the dependency graph, double-click to zoom in around the pointer. Hold `Shift` while double-clicking to zoom out. Zoom is bounded to keep the graph usable.
+
 ## Limitations
 
 - The analyzer is Java/package based; it does not model runtime calls, reflection, generated sources, or dependency-injection wiring.
