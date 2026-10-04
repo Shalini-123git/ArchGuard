@@ -36,6 +36,17 @@ const violations = [{
 afterEach(() => vi.restoreAllMocks());
 
 describe('dashboard', () => {
+  it('goes back to the previous app page', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response({ runningScans: 0, queuedScans: 0, maxConcurrentScans: 2 })));
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scan queue' }));
+    expect(await screen.findByRole('heading', { name: 'Scan queue' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('heading', { name: 'New scan' })).toBeTruthy();
+  });
+
   it('submits a scan, polls it, and renders completed results', async () => {
     const queuedScan = { ...scan, status: 'QUEUED', healthScore: null };
     const fetch = vi.fn()
@@ -95,6 +106,28 @@ describe('dashboard', () => {
     expect(screen.getByText('1 packages matched')).toBeTruthy();
     expect(screen.getByText('Matches no packages. Check the prefix.')).toBeTruthy();
     expect(screen.getByText('1 packages are not in any layer, so layer rules do not apply to them.')).toBeTruthy();
+  });
+
+  it('rescans with the stored rules YAML', async () => {
+    const queuedScan = { ...scan, status: 'QUEUED', healthScore: null };
+    const rules = { custom: true, rulesYaml: 'noCycles: false\n', rules: { layers: [], forbidden: [], noCycles: false } };
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(queuedScan, 202))
+      .mockResolvedValueOnce(response(scan))
+      .mockResolvedValueOnce(response(graph))
+      .mockResolvedValueOnce(response(violations))
+      .mockResolvedValueOnce(response([scan]))
+      .mockResolvedValueOnce(response(rules));
+    vi.stubGlobal('fetch', fetch);
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Repository URL'), { target: { value: scan.repositoryUrl } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start scan' }));
+    await waitFor(() => expect(screen.getByText(scan.repositoryUrl)).toBeTruthy(), { timeout: 2_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Rescan with same rules' }));
+    await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/api/scans', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ repoUrl: scan.repositoryUrl, rulesYaml: rules.rulesYaml })
+    })));
   });
 
   it('resets hidden filters and clears a violation when it is selected again', () => {

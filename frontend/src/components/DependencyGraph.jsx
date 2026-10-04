@@ -80,6 +80,10 @@ export default function DependencyGraph({ graph, visibleNodes, selectedViolation
       const level = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cy.zoom() * zoomDirection));
       cy.zoom({ level, position: event.position });
     });
+    cy.on('zoom', () => {
+      if (typeof cy.style !== 'function') return;
+      cy.style().selector('node').style('font-size', cy.zoom() < 1.1 ? 0 : 12).update();
+    });
     cy.on('tap', (event) => {
       if (event.target === cy) {
         onNodeSelect(null);
@@ -132,6 +136,33 @@ export default function DependencyGraph({ graph, visibleNodes, selectedViolation
     }
   }, [selectedNode, selectedViolation, visibleEdges]);
 
+  useEffect(() => {
+    const element = container.current;
+    const cy = cyRef.current;
+    if (!element || !cy || typeof ResizeObserver === 'undefined') return undefined;
+    let timer;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        cy.resize();
+        cy.fit(cy.elements(), 50);
+      }, 150);
+    });
+    observer.observe(element);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [visibleNodes.length]);
+
+  function fitGraph() {
+    const cy = cyRef.current;
+    if (cy) {
+      cy.resize();
+      cy.fit(cy.elements(), 50);
+    }
+  }
+
   if (!visibleNodes.length) return <div className="graph-empty">No packages match the current filters.</div>;
-  return <div className="graph-section"><div className="graph-legend">{legendLayers.map(({ label, color }) => <span key={label}><i className="legend-node" style={{ background: color }} /> {label}</span>)}<span><i className="legend-cycle" /> Cycle member</span><span><i className="legend-violation" /> Violation dependency</span><span><i className="legend-normal" /> Normal dependency</span></div><div className="graph-canvas" ref={container} aria-label="Package dependency graph. Double-click to zoom in; Shift-double-click to zoom out." /></div>;
+  return <div className="graph-section"><div className="graph-toolbar"><div className="graph-legend">{legendLayers.map(({ label, color }) => <span key={label}><i className="legend-node" style={{ background: color }} /> {label}</span>)}<span><i className="legend-cycle" /> Cycle member</span><span><i className="legend-violation" /> Violation dependency</span><span><i className="legend-normal" /> Normal dependency</span></div><button type="button" className="secondary small-button graph-fit" onClick={fitGraph}>Fit</button></div><div className="graph-canvas" ref={container} aria-label="Package dependency graph. Double-click to zoom in; Shift-double-click to zoom out." /></div>;
 }

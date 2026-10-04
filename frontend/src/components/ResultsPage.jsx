@@ -11,7 +11,7 @@ function scoreClass(score) {
   return 'risk';
 }
 
-export default function ResultsPage({ scan, results, onStartOver }) {
+export default function ResultsPage({ scan, results, onStartOver, onEditRules, onRescan }) {
   const [selectedViolation, setSelectedViolation] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [search, setSearch] = useState('');
@@ -40,7 +40,7 @@ export default function ResultsPage({ scan, results, onStartOver }) {
     { label: 'Architecture violations', value: results.violations.length },
     ...(typeof scan.parseFailureCount === 'number' ? [{ label: 'Parse/analyzer warnings', value: scan.parseFailureCount }] : [])
   ];
-  return <section className="results"><div className="results-header"><div><p className="eyebrow">SCAN COMPLETE</p><h2>{scan.repositoryUrl}</h2></div><div className="results-actions"><button className="secondary" onClick={onStartOver}>New scan</button></div></div>
+  return <section className="results"><div className="results-header"><div><p className="eyebrow">SCAN COMPLETE</p><h2>{scan.repositoryUrl}</h2></div><div className="results-actions"><button className="secondary" onClick={onStartOver}>New scan</button><button className="secondary" onClick={onEditRules}>Edit rules &amp; rescan</button><button onClick={onRescan}>Rescan with same rules</button></div></div>
     <section className="scan-summary" aria-label="Scan result"><p className="eyebrow">SCAN RESULT</p><div className="metric-grid">{metrics.map((metric) => <div className="metric-tile" key={metric.label}><span>{metric.label}</span><strong className={metric.className}>{metric.value}</strong></div>)}</div></section>
     <RulesUsedCard rules={results.rules} modules={results.graph.modules} />
     <HealthTrend history={results.history} />
