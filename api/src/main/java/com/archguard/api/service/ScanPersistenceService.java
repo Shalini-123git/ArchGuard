@@ -50,7 +50,11 @@ public class ScanPersistenceService {
             violations.save(new ViolationEntity(scan, violation.getRuleId(), violation.getSeverity(),
                     moduleByName.get(violation.getFromPackage()), moduleByName.get(violation.getToPackage()), affected));
         }
-        scan.markCompleted(commitSha);
+    }
+
+    @Transactional
+    public void markCompleted(UUID scanId, String commitSha) {
+        find(scanId).markCompleted(commitSha);
     }
 
     @Transactional

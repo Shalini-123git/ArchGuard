@@ -70,6 +70,7 @@ public class ScanWorker {
         ScanReport report = analyzer.analyze(source.root(), ScanOptions.defaults(), rules);
         persistence.persistCompleted(scanId, source.commitSha(), report);
         explanations.explainScan(scanId, source.root());
+        persistence.markCompleted(scanId, source.commitSha());
         LOGGER.info("scanId={} event=completed violationCount={} durationMs={}", scanId,
                 report.getViolations().size(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt));
     }

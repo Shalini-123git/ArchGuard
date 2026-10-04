@@ -205,6 +205,8 @@ The paths are placeholders and are intentionally not committed until real screen
 
 In the dependency graph, double-click to zoom in around the pointer. Hold `Shift` while double-clicking to zoom out. Zoom is bounded to keep the graph usable.
 
+LLM explanations are configured with `LLM_API_KEY`, `ARCHGUARD_LLM_MODEL`, `ARCHGUARD_LLM_MAX_TOKENS` (default `1500`), and `ARCHGUARD_LLM_DELAY_BETWEEN_CALLS_MS` (default `400`). Provider explanations are cached; fallback explanations are intentionally not cached so transient failures can be retried on a later scan.
+
 ## Limitations
 
 - The analyzer is Java/package based; it does not model runtime calls, reflection, generated sources, or dependency-injection wiring.
