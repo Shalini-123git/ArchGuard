@@ -9,4 +9,5 @@ import java.util.UUID;
 /** Database access for persisted package edges. */
 public interface DependencyJpaRepository extends JpaRepository<DependencyEntity, UUID> {
     List<DependencyEntity> findByScanId(UUID scanId);
+    void deleteByScanId(UUID scanId);
 }

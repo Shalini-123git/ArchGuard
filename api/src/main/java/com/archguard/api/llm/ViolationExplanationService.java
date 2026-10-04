@@ -19,6 +19,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
+import com.archguard.analysis.ScanCancelledException;
 
 /** Explains a bounded number of persisted violations and caches provider results. */
 @Service
@@ -36,10 +38,16 @@ public class ViolationExplanationService {
 
     @Transactional
     public void explainScan(java.util.UUID scanId, Path projectRoot) {
+        explainScan(scanId, projectRoot, () -> false);
+    }
+
+    @Transactional
+    public void explainScan(java.util.UUID scanId, Path projectRoot, BooleanSupplier cancelled) {
         List<ViolationEntity> selected = violations.findWithAffectedModulesByScanId(scanId).stream()
                 .sorted(Comparator.comparing(ViolationEntity::getRuleId).thenComparing(v -> moduleName(v.getSourceModule())))
                 .limit(properties.getViolationsPerScanLimit()).toList();
         for (int index = 0; index < selected.size(); index++) {
+            if (cancelled.getAsBoolean()) throw new ScanCancelledException();
             ViolationEntity violation = selected.get(index);
             ViolationContext context = context(violation, projectRoot);
             String hash = hash(context);
@@ -50,6 +58,7 @@ public class ViolationExplanationService {
             violation.setExplanation(result.text(), result.fallback());
             violations.save(violation);
             if (index < selected.size() - 1) sleepBetweenCalls();
+            if (cancelled.getAsBoolean()) throw new ScanCancelledException();
         }
     }
 

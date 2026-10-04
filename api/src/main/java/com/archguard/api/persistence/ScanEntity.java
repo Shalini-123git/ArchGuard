@@ -67,6 +67,7 @@ public class ScanEntity {
     public void markRunning() { status = ScanStatus.RUNNING; startedAt = Instant.now(); }
     public void markCompleted(String commitSha) { this.commitSha = commitSha; status = ScanStatus.COMPLETED; completedAt = Instant.now(); }
     public void markFailed(String message) { status = ScanStatus.FAILED; errorMessage = message; completedAt = Instant.now(); }
+    public void markCancelled() { status = ScanStatus.CANCELLED; errorMessage = "Cancelled by user"; completedAt = Instant.now(); }
 
     public UUID getId() { return id; }
     public RepositoryEntity getRepository() { return repository; }

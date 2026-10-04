@@ -13,4 +13,5 @@ public interface ViolationJpaRepository extends JpaRepository<ViolationEntity, U
     List<ViolationEntity> findWithAffectedModulesByScanId(UUID scanId);
 
     long countByScanId(UUID scanId);
+    void deleteByScanId(UUID scanId);
 }

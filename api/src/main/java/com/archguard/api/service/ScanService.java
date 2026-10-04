@@ -54,15 +54,19 @@ public class ScanService {
     private final DependencyJpaRepository dependencies;
     private final ViolationJpaRepository violations;
     private final ScanWorker worker;
+    private final ScanPersistenceService persistence;
     private final IngestionService ingestion;
     private final ThreadPoolTaskExecutor scanExecutor;
     private final ArchGuardProperties properties;
+    private final ScanCancellationRegistry cancellationRegistry;
 
     public ScanService(RepositoryJpaRepository repositories, ScanJpaRepository scans, ModuleJpaRepository modules,
-                       DependencyJpaRepository dependencies, ViolationJpaRepository violations, ScanWorker worker, IngestionService ingestion,
-                       @Qualifier("scanExecutor") ThreadPoolTaskExecutor scanExecutor, ArchGuardProperties properties) {
+                       DependencyJpaRepository dependencies, ViolationJpaRepository violations, ScanWorker worker, ScanPersistenceService persistence, IngestionService ingestion,
+                       @Qualifier("scanExecutor") ThreadPoolTaskExecutor scanExecutor, ArchGuardProperties properties,
+                       ScanCancellationRegistry cancellationRegistry) {
         this.repositories = repositories; this.scans = scans; this.modules = modules; this.dependencies = dependencies;
-        this.violations = violations; this.worker = worker; this.ingestion = ingestion; this.scanExecutor = scanExecutor; this.properties = properties;
+        this.violations = violations; this.worker = worker; this.persistence = persistence; this.ingestion = ingestion; this.scanExecutor = scanExecutor; this.properties = properties;
+        this.cancellationRegistry = cancellationRegistry;
     }
 
     @Transactional
@@ -87,6 +91,19 @@ public class ScanService {
 
     @Transactional(readOnly = true)
     public ScanResponse get(UUID scanId) { return response(findScan(scanId)); }
+
+    @Transactional
+    public ScanResponse cancel(UUID scanId) {
+        ScanEntity scan = findScan(scanId);
+        if (scan.getStatus() == ScanStatus.COMPLETED || scan.getStatus() == ScanStatus.FAILED) {
+            throw new ConflictException("Scan already finished");
+        }
+        if (scan.getStatus() == ScanStatus.QUEUED || scan.getStatus() == ScanStatus.RUNNING) {
+            cancellationRegistry.cancel(scanId);
+            persistence.markCancelled(scanId);
+        }
+        return response(findScan(scanId));
+    }
 
     @Transactional(readOnly = true)
     public List<ScanResponse> list(ScanStatus status, int page, int size) {
@@ -156,7 +173,9 @@ public class ScanService {
     @Transactional(readOnly = true)
     public List<ScanResponse> history(UUID repositoryId) {
         if (!repositories.existsById(repositoryId)) throw new NotFoundException("Repository not found: " + repositoryId);
-        return scans.findByRepositoryIdOrderByCreatedAtDesc(repositoryId).stream().map(this::response).toList();
+        return scans.findByRepositoryIdOrderByCreatedAtDesc(repositoryId).stream()
+                .filter(scan -> scan.getStatus() != ScanStatus.CANCELLED)
+                .map(this::response).toList();
     }
 
     private ScanResponse response(ScanEntity scan) {

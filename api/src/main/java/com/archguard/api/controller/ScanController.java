@@ -46,6 +46,9 @@ public class ScanController {
     @GetMapping("/{scanId}")
     public ScanResponse get(@PathVariable UUID scanId) { return scanService.get(scanId); }
 
+    @PostMapping("/{scanId}/cancel")
+    public ScanResponse cancel(@PathVariable UUID scanId) { return scanService.cancel(scanId); }
+
     @GetMapping("/{scanId}/graph")
     public GraphResponse graph(@PathVariable UUID scanId) { return scanService.graph(scanId); }
 

@@ -33,11 +33,17 @@ public class ScanPersistenceService {
     }
 
     @Transactional
-    public void markRunning(UUID scanId) { find(scanId).markRunning(); }
+    public boolean markRunning(UUID scanId) {
+        ScanEntity scan = findForUpdate(scanId);
+        if (!active(scan)) return false;
+        scan.markRunning();
+        return true;
+    }
 
     @Transactional
-    public void persistCompleted(UUID scanId, String commitSha, ScanReport report) {
-        ScanEntity scan = find(scanId);
+    public boolean persistCompleted(UUID scanId, String commitSha, ScanReport report) {
+        ScanEntity scan = findForUpdate(scanId);
+        if (!active(scan)) return false;
         Map<String, ModuleEntity> moduleByName = new LinkedHashMap<>();
         for (String packageName : report.getGraph().packages()) moduleByName.put(packageName, new ModuleEntity(scan, packageName));
         modules.saveAll(moduleByName.values());
@@ -50,15 +56,39 @@ public class ScanPersistenceService {
             violations.save(new ViolationEntity(scan, violation.getRuleId(), violation.getSeverity(),
                     moduleByName.get(violation.getFromPackage()), moduleByName.get(violation.getToPackage()), affected));
         }
+        return true;
     }
 
     @Transactional
-    public void markCompleted(UUID scanId, String commitSha) {
-        find(scanId).markCompleted(commitSha);
+    public boolean markCompleted(UUID scanId, String commitSha) {
+        ScanEntity scan = findForUpdate(scanId);
+        if (!active(scan)) return false;
+        scan.markCompleted(commitSha);
+        return true;
     }
 
     @Transactional
-    public void markFailed(UUID scanId, String message) { find(scanId).markFailed(message); }
+    public boolean markFailed(UUID scanId, String message) {
+        ScanEntity scan = findForUpdate(scanId);
+        if (!active(scan)) return false;
+        scan.markFailed(message);
+        return true;
+    }
+
+    @Transactional
+    public void markCancelled(UUID scanId) {
+        ScanEntity scan = findForUpdate(scanId);
+        if (active(scan)) scan.markCancelled();
+    }
+
+    @Transactional
+    public void discardResults(UUID scanId) {
+        violations.deleteByScanId(scanId);
+        dependencies.deleteByScanId(scanId);
+        modules.deleteByScanId(scanId);
+    }
 
     private ScanEntity find(UUID scanId) { return scans.findById(scanId).orElseThrow(() -> new NotFoundException("Scan not found: " + scanId)); }
+    private ScanEntity findForUpdate(UUID scanId) { return scans.findByIdForUpdate(scanId).orElseThrow(() -> new NotFoundException("Scan not found: " + scanId)); }
+    private boolean active(ScanEntity scan) { return scan.getStatus() == com.archguard.api.persistence.ScanStatus.QUEUED || scan.getStatus() == com.archguard.api.persistence.ScanStatus.RUNNING; }
 }
