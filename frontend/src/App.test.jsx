@@ -43,7 +43,8 @@ describe('dashboard', () => {
       .mockResolvedValueOnce(response(scan))
       .mockResolvedValueOnce(response(graph))
       .mockResolvedValueOnce(response(violations))
-      .mockResolvedValueOnce(response([scan]));
+      .mockResolvedValueOnce(response([scan]))
+      .mockResolvedValueOnce(response({ custom: false, rulesYaml: null, rules: { layers: [], forbidden: [], noCycles: true } }));
     vi.stubGlobal('fetch', fetch);
 
     render(<App />);
@@ -53,7 +54,7 @@ describe('dashboard', () => {
     await waitFor(() => expect(screen.getByText(scan.repositoryUrl)).toBeTruthy(), { timeout: 2_000 });
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
       '/api/scans', '/api/scans/scan-1', '/api/scans/scan-1/graph',
-      '/api/scans/scan-1/violations', '/api/repos/repository-1/history'
+      '/api/scans/scan-1/violations', '/api/repos/repository-1/history', '/api/scans/scan-1/rules'
     ]);
   });
 
@@ -78,6 +79,22 @@ describe('dashboard', () => {
     render(<ResultsPage scan={{ ...scan, parseFailureCount: 3 }} results={{ graph, violations, history: [scan] }} onStartOver={vi.fn()} />);
 
     expect(screen.getByText('Parse/analyzer warnings').parentElement.textContent).toContain('3');
+  });
+
+  it('shows rule matches, zero-match warnings, and unknown package counts', () => {
+    render(<ResultsPage scan={scan} results={{
+      graph: { modules: [...graph.modules, { id: 'com.example.util', layer: 'unknown', cycleMember: false }], dependencies: graph.dependencies },
+      violations, history: [scan],
+      rules: {
+        custom: true,
+        rulesYaml: 'layers:\n  - name: web\n    packagePatterns: [com.example.web]\nnoCycles: true\n',
+        rules: { layers: [{ name: 'web', packagePatterns: ['com.example.web'] }, { name: 'service', packagePatterns: ['com.example.service'] }], forbidden: [], noCycles: true }
+      }
+    }} onStartOver={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Rules used/i }));
+    expect(screen.getByText('1 packages matched')).toBeTruthy();
+    expect(screen.getByText('Matches no packages. Check the prefix.')).toBeTruthy();
+    expect(screen.getByText('1 packages are not in any layer, so layer rules do not apply to them.')).toBeTruthy();
   });
 
   it('resets hidden filters and clears a violation when it is selected again', () => {

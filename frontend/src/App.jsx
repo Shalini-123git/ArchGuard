@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createScan, getGraph, getRepositoryHistory, getScan, getViolations } from './api.js';
+import { createScan, getGraph, getRepositoryHistory, getScan, getScanRules, getViolations } from './api.js';
 import ScanForm from './components/ScanForm.jsx';
 import ScanStatus from './components/ScanStatus.jsx';
 import ResultsPage from './components/ResultsPage.jsx';
@@ -24,8 +24,8 @@ export default function App() {
   useEffect(() => {
     if (scan?.status !== 'COMPLETED') return;
     setLoadingResults(true);
-    Promise.all([getGraph(scan.id), getViolations(scan.id), getRepositoryHistory(scan.repositoryId)])
-      .then(([graph, violations, history]) => setResults({ graph, violations, history }))
+    Promise.all([getGraph(scan.id), getViolations(scan.id), getRepositoryHistory(scan.repositoryId), getScanRules(scan.id)])
+      .then(([graph, violations, history, rules]) => setResults({ graph, violations, history, rules }))
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoadingResults(false));
   }, [scan?.id, scan?.status]);

@@ -24,4 +24,5 @@ export function getScans({ status, page = 0, size = 50 } = {}) {
 export function getQueueStatus() { return request('/scans/queue-status'); }
 export function getGraph(scanId) { return request(`/scans/${scanId}/graph`); }
 export function getViolations(scanId) { return request(`/scans/${scanId}/violations`); }
+export function getScanRules(scanId) { return request(`/scans/${scanId}/rules`); }
 export function getRepositoryHistory(repositoryId) { return request(`/repos/${repositoryId}/history`); }

@@ -6,6 +6,7 @@ import com.archguard.api.dto.GraphResponse;
 import com.archguard.api.dto.QueueStatusResponse;
 import com.archguard.api.dto.ScanResponse;
 import com.archguard.api.dto.ViolationResponse;
+import com.archguard.api.dto.RulesResponse;
 import com.archguard.api.exception.BadRequestException;
 import com.archguard.api.exception.ConflictException;
 import com.archguard.api.exception.NotFoundException;
@@ -131,6 +132,25 @@ public class ScanService {
                 violation.getTargetModule() == null ? null : violation.getTargetModule().getName(), violation.getBlastRadiusCount(),
                 violation.getAffectedModules().stream().map(module -> module.getName()).sorted().toList(),
                 violation.getExplanation(), violation.isExplanationFallback())).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public RulesResponse rulesView(UUID scanId) {
+        ScanEntity scan = findScan(scanId);
+        String yaml = scan.getRulesYaml();
+        if (yaml == null || yaml.isBlank()) return new RulesResponse(false, null, rulesView(new ArchitectureRules()));
+        try {
+            return new RulesResponse(true, yaml, rulesView(new ArchitectureRulesLoader().load(yaml)));
+        } catch (RuntimeException exception) {
+            return new RulesResponse(true, yaml, null);
+        }
+    }
+
+    private RulesResponse.RulesView rulesView(ArchitectureRules rules) {
+        return new RulesResponse.RulesView(
+                rules.getLayers().stream().map(layer -> new RulesResponse.Layer(layer.getName(), List.copyOf(layer.getPackagePatterns()))).toList(),
+                rules.getForbidden().stream().map(rule -> new RulesResponse.Forbidden(rule.getFrom(), rule.getTo(), rule.getSeverity())).toList(),
+                rules.isNoCycles());
     }
 
     @Transactional(readOnly = true)
